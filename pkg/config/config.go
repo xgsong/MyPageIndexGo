@@ -23,12 +23,12 @@ type Config struct {
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		OpenAIModel:      "gpt-4o",
-		MaxConcurrency:   5,
-		MaxPagesPerNode:  10,
-		MaxTokensPerNode: 16000,
+		OpenAIModel:       "gpt-4o",
+		MaxConcurrency:    5,
+		MaxPagesPerNode:   10,
+		MaxTokensPerNode:  16000,
 		GenerateSummaries: false,
-		LogLevel:         "info",
+		LogLevel:          "info",
 	}
 }
 

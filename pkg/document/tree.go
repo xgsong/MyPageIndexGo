@@ -43,10 +43,10 @@ func (n *Node) CountNodes() int {
 
 // IndexTree represents the complete index tree for a document.
 type IndexTree struct {
-	Root         *Node       `json:"root"`
-	TotalPages   int         `json:"total_pages"`
-	DocumentInfo string      `json:"document_info"`
-	GeneratedAt  time.Time   `json:"generated_at"`
+	Root         *Node     `json:"root"`
+	TotalPages   int       `json:"total_pages"`
+	DocumentInfo string    `json:"document_info"`
+	GeneratedAt  time.Time `json:"generated_at"`
 }
 
 // NewIndexTree creates a new empty IndexTree.
