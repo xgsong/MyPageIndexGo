@@ -1,0 +1,43 @@
+# Output
+pageindex
+*.exe
+*.dll
+*.so
+
+# Environment
+.env
+.env.*
+
+# Go
+*.test
+*.prof
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Output JSON
+output.json
+index.json
+result.json
+
+# Test outputs
+*.prof
+cpu.prof
+mem.prof
+coverage.out
+coverage.html
+
+# Release distribution
+dist/
+
+# Claude
+.claude/
+
+# E2E test outputs
+pageindex-e2e-*.json
+test-results/

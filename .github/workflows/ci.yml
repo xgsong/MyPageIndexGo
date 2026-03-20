@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go: ['1.25']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go }}
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Lint (golangci-lint)
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: v1.61.0
+        args: --timeout=5m
+
+    - name: Run tests with coverage
+      run: go test -race -coverprofile=coverage.out ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: coverage.out
+        fail_ci_if_error: false
+
+    - name: Build
+      run: go build -o pageindex ./cmd/pageindex
+
+    - name: Vet
+      run: go vet ./...
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'v')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run all tests
+      run: go test -race ./...
+
+    - name: Build Linux amd64
+      run: |
+        GOOS=linux GOARCH=amd64 go build -o pageindex-linux-amd64 ./cmd/pageindex
+        zip pageindex-linux-amd64.zip pageindex-linux-amd64
+
+    - name: Build Darwin amd64
+      run: |
+        GOOS=darwin GOARCH=amd64 go build -o pageindex-darwin-amd64 ./cmd/pageindex
+        zip pageindex-darwin-amd64.zip pageindex-darwin-amd64
+
+    - name: Build Darwin arm64
+      run: |
+        GOOS=darwin GOARCH=arm64 go build -o pageindex-darwin-arm64 ./cmd/pageindex
+        zip pageindex-darwin-arm64.zip pageindex-darwin-arm64
+
+    - name: Build Windows amd64
+      run: |
+        GOOS=windows GOARCH=amd64 go build -o pageindex-windows-amd64.exe ./cmd/pageindex
+        zip pageindex-windows-amd64.zip pageindex-windows-amd64.exe
+
+    - name: Upload Release Assets
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          *.zip
+        generate_release_notes: true
