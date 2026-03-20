@@ -36,18 +36,24 @@ func NewOpenAIClient(cfg *config.Config) *OpenAIClient {
 	}
 }
 
-// createChatCompletion sends a chat completion request and returns the content.
+// createChatCompletion sends a chat completion request with retry logic.
 func (c *OpenAIClient) createChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (string, error) {
-	resp, err := c.client.CreateChatCompletion(ctx, req)
+	var content string
+	err := utils.DoRetry(ctx, utils.DefaultRetryConfig(), func() error {
+		resp, err := c.client.CreateChatCompletion(ctx, req)
+		if err != nil {
+			return err
+		}
+		if len(resp.Choices) == 0 {
+			return fmt.Errorf("no choices returned from OpenAI")
+		}
+		content = resp.Choices[0].Message.Content
+		return nil
+	})
 	if err != nil {
 		return "", fmt.Errorf("openai api call failed: %w", err)
 	}
-
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no choices returned from OpenAI")
-	}
-
-	return resp.Choices[0].Message.Content, nil
+	return content, nil
 }
 
 // GenerateStructure generates a hierarchical tree structure from raw page text.
