@@ -3,6 +3,7 @@ package output
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -127,6 +128,9 @@ func TestSaveJSON_PermissionDenied(t *testing.T) {
 	// Try to save to a read-only directory
 	if os.Getuid() == 0 {
 		t.Skip("Skipping permission test when running as root")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission denied test on Windows")
 	}
 
 	root := document.NewNode("Root", 1, 1)
