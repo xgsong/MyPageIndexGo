@@ -42,11 +42,6 @@ func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGener
 		maxTokens = 16000
 	}
 
-	// Ensure max concurrency is at least 1
-	maxConcurrency := cfg.MaxConcurrency
-	if maxConcurrency <= 0 {
-		maxConcurrency = 1
-	}
 
 	pageGrouper := NewPageGrouper(tok, maxTokens)
 

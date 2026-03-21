@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -269,21 +268,3 @@ func init() {
 	zerolog.TimeFieldFormat = time.RFC3339
 }
 
-// printError prints a user-friendly error message
-func printError(msg string) {
-	fmt.Fprintf(os.Stderr, "Error: %s\n", msg)
-}
-
-// printErrorAndExit prints an error and exits with code 1
-func printErrorAndExit(msg string) {
-	printError(msg)
-	os.Exit(1)
-}
-
-// ensureSuffix ensures a string ends with the given suffix
-func ensureSuffix(s, suffix string) string {
-	if strings.HasSuffix(s, suffix) {
-		return s
-	}
-	return s + suffix
-}

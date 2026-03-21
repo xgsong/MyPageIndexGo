@@ -24,9 +24,14 @@ log_level: debug
 	require.NoError(t, err)
 
 	// Change to temp directory
-	originalDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(originalDir)
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
+	defer func() {
+		err := os.Chdir(originalDir)
+		require.NoError(t, err)
+	}()
 
 	// Also set env var to avoid validation error
 	os.Setenv("OPENAI_API_KEY", "test-key-from-env")

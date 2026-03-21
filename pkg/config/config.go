@@ -56,14 +56,14 @@ func Load() (*Config, error) {
 	v.SetEnvPrefix("PAGEINDEX")
 
 	// Also bind non-prefixed versions for compatibility with .env
-	v.BindEnv("openai_api_key", "OPENAI_API_KEY")
-	v.BindEnv("openai_base_url", "OPENAI_BASE_URL")
-	v.BindEnv("openai_model", "OPENAI_MODEL")
-	v.BindEnv("max_concurrency", "MAX_CONCURRENCY")
-	v.BindEnv("max_pages_per_node", "MAX_PAGES_PER_NODE")
-	v.BindEnv("max_tokens_per_node", "MAX_TOKENS_PER_NODE")
-	v.BindEnv("generate_summaries", "GENERATE_SUMMARIES")
-	v.BindEnv("log_level", "LOG_LEVEL")
+	_ = v.BindEnv("openai_api_key", "OPENAI_API_KEY")
+	_ = v.BindEnv("openai_base_url", "OPENAI_BASE_URL")
+	_ = v.BindEnv("openai_model", "OPENAI_MODEL")
+	_ = v.BindEnv("max_concurrency", "MAX_CONCURRENCY")
+	_ = v.BindEnv("max_pages_per_node", "MAX_PAGES_PER_NODE")
+	_ = v.BindEnv("max_tokens_per_node", "MAX_TOKENS_PER_NODE")
+	_ = v.BindEnv("generate_summaries", "GENERATE_SUMMARIES")
+	_ = v.BindEnv("log_level", "LOG_LEVEL")
 
 	// Try to read from config file if exists
 	v.SetConfigName("config")

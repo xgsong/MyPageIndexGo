@@ -41,3 +41,4 @@ dist/
 # E2E test outputs
 pageindex-e2e-*.json
 test-results/
+.remember/

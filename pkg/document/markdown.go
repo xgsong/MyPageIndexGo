@@ -82,7 +82,7 @@ func (te *textExtractor) walk(node ast.Node, entering bool) (ast.WalkStatus, err
 
 	switch n := node.(type) {
 	case *ast.Text:
-		te.buf.Write(n.Text(te.source))
+		te.buf.Write(n.Segment.Value(te.source))
 		te.buf.WriteByte(' ')
 	case *ast.Heading:
 		// Add newlines before headings for better separation
