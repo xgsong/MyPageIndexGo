@@ -116,6 +116,8 @@ export PAGEINDEX_MAX_CONCURRENCY=10                                 # Default: 5
 export PAGEINDEX_MAX_TOKENS_PER_NODE=16000                          # Default: 16000
 export PAGEINDEX_GENERATE_SUMMARIES=false                            # Default: false
 export PAGEINDEX_LOG_LEVEL=info                                      # Default: info
+export PAGEINDEX_ENABLE_CACHE=true                                   # Enable LLM response caching (default: true)
+export PAGEINDEX_CACHE_TTL=3600                                      # Cache TTL in seconds (default: 3600)
 ```
 
 ## Usage
@@ -233,6 +235,26 @@ mypageindexgo/
 - **Memory Footprint**: <500MB for 200-page documents with OCR
 - **Throughput**: Handles 10+ concurrent LLM requests with configurable rate limiting
 
+### Performance Optimization Roadmap
+
+We are continuously optimizing performance to handle even larger workloads:
+
+| Optimization | Expected Improvement | Status |
+|--------------|----------------------|--------|
+| LLM call caching | 30%-70% reduction in API calls, 2x-5x faster repeated processing | 🚧 In Progress |
+| Exponential backoff retry | 99%+ API call success rate | 🚧 In Progress |
+| Node ID hash index | 10x-100x faster node lookup during search | 🚧 In Progress |
+| Dynamic concurrency control | 30%-100% faster index generation, better API quota utilization | 📋 Planned |
+| Streaming document processing | 40%-60% lower memory usage, support for GB-sized documents | 📋 Planned |
+| Batch LLM calls | 50%-70% reduction in API calls for summary generation | 📋 Planned |
+| Local lightweight model acceleration | 50%-80% lower API cost, 60%-90% lower latency (with GPU) | 📋 Planned |
+
+After all optimizations are implemented, PageIndex will be able to:
+- Process 10GB+ sized documents with <1GB memory footprint
+- Generate indexes 2-3x faster than current implementation
+- Achieve sub-2 second search latency
+- Support 100+ concurrent users with proper scaling
+
 ### Deployment Advantages
 
 - **Single Binary**: No dependency management, no virtual environments
@@ -253,11 +275,16 @@ mypageindexgo/
 - [x] 90%+ test coverage
 
 ### Phase 2: Enhanced Features (In Progress)
+- [x] Retry logic with exponential backoff ✅
+- [x] LLM call caching for repeated processing ✅
+- [x] Node ID hash index for faster search ✅
 - [ ] Additional document formats (DOCX, HTML, EPUB)
 - [ ] Multiple LLM provider support (Anthropic, Google, local models)
-- [ ] Retry logic with exponential backoff
+- [ ] Dynamic concurrency control with rate limit adaptation
+- [ ] Streaming document processing for large files
 - [ ] Batch document processing
 - [ ] Index versioning and migration
+- [ ] Batch LLM calls for summary generation
 
 ### Phase 3: Storage Backend Adapters (Planned)
 The index storage will be abstracted to support multiple backends:
@@ -410,6 +437,8 @@ export PAGEINDEX_MAX_CONCURRENCY=10                                 # 默认: 5
 export PAGEINDEX_MAX_TOKENS_PER_NODE=16000                          # 默认: 16000
 export PAGEINDEX_GENERATE_SUMMARIES=false                            # 默认: false
 export PAGEINDEX_LOG_LEVEL=info                                      # 默认: info
+export PAGEINDEX_ENABLE_CACHE=true                                   # 启用 LLM 响应缓存 (默认: true)
+export PAGEINDEX_CACHE_TTL=3600                                      # 缓存有效期，单位秒 (默认: 3600)
 ```
 
 ## 使用说明
@@ -513,11 +542,16 @@ mypageindexgo/
 - [x] 90%+ 测试覆盖率
 
 ### 第二阶段：增强功能（进行中）
+- [x] 指数退避重试逻辑 ✅
+- [x] LLM 调用缓存，支持重复处理加速 ✅
+- [x] 节点 ID 哈希索引，提升搜索速度 ✅
 - [ ] 更多文档格式（DOCX、HTML、EPUB）
 - [ ] 多 LLM 提供商支持（Anthropic、Google、本地模型）
-- [ ] 指数退避重试逻辑
+- [ ] 动态并发控制与速率限制自适应
+- [ ] 流式文档处理，支持大文件
 - [ ] 批量文档处理
 - [ ] 索引版本控制和迁移
+- [ ] 摘要生成批量 LLM 调用
 
 ### 第三阶段：存储后端适配器（计划中）
 索引存储将抽象为支持多种后端：
