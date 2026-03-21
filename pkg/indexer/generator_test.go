@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -184,4 +185,205 @@ func TestGenerateSummariesForNode_NilNode(t *testing.T) {
 	ctx := context.Background()
 	err = gen.GenerateSummariesForNode(ctx, nil, "text")
 	assert.Error(t, err)
+}
+
+func TestGenerateSummariesForNode_LLMError(t *testing.T) {
+	cfg := config.DefaultConfig()
+	expectedErr := fmt.Errorf("LLM service unavailable")
+
+	mockLLM := &MockLLMClient{
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+			return "", expectedErr
+		},
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	node := document.NewNode("Test", 1, 10)
+	text := "This is the node content that needs a summary."
+
+	ctx := context.Background()
+	err = gen.GenerateSummariesForNode(ctx, node, text)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Contains(t, err.Error(), "failed to generate summary")
+	// Summary should remain empty
+	assert.Equal(t, "", node.Summary)
+}
+
+func TestGenerateAllSummaries_NoSummariesNeeded(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mockLLM := &MockLLMClient{}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	// Create a tree where all nodes already have summaries
+	root := document.NewNode("Root", 1, 10)
+	root.Summary = "Root summary"
+	child1 := document.NewNode("Child 1", 1, 5)
+	child1.Summary = "Child 1 summary"
+	child2 := document.NewNode("Child 2", 6, 10)
+	child2.Summary = "Child 2 summary"
+	root.AddChild(child1)
+	root.AddChild(child2)
+
+	// Set the document in the generator
+	gen.doc = &document.Document{
+		Pages: []document.Page{
+			{Number: 1, Text: "Page 1 content"},
+			{Number: 2, Text: "Page 2 content"},
+			{Number: 3, Text: "Page 3 content"},
+			{Number: 4, Text: "Page 4 content"},
+			{Number: 5, Text: "Page 5 content"},
+			{Number: 6, Text: "Page 6 content"},
+			{Number: 7, Text: "Page 7 content"},
+			{Number: 8, Text: "Page 8 content"},
+			{Number: 9, Text: "Page 9 content"},
+			{Number: 10, Text: "Page 10 content"},
+		},
+	}
+
+	ctx := context.Background()
+	err = gen.generateAllSummaries(ctx, root)
+	assert.NoError(t, err)
+
+	// Summaries should remain unchanged
+	assert.Equal(t, "Root summary", root.Summary)
+	assert.Equal(t, "Child 1 summary", child1.Summary)
+	assert.Equal(t, "Child 2 summary", child2.Summary)
+}
+
+func TestGenerateAllSummaries_GenerateAll(t *testing.T) {
+	cfg := config.DefaultConfig()
+	summaryMap := map[string]string{
+		"Root":     "Root document summary",
+		"Child 1":  "Child 1 section summary",
+		"Child 2":  "Child 2 section summary",
+		"Section":  "Section summary",
+	}
+
+	var mu sync.Mutex
+	callCount := 0
+
+	mockLLM := &MockLLMClient{
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			callCount++
+			return summaryMap[nodeTitle], nil
+		},
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	// Create a tree with no summaries
+	root := document.NewNode("Root", 1, 10)
+	child1 := document.NewNode("Child 1", 1, 5)
+	child1.AddChild(document.NewNode("Section", 1, 2))
+	child2 := document.NewNode("Child 2", 6, 10)
+	root.AddChild(child1)
+	root.AddChild(child2)
+
+	// Set the document in the generator
+	gen.doc = &document.Document{
+		Pages: []document.Page{
+			{Number: 1, Text: "Page 1 content"},
+			{Number: 2, Text: "Page 2 content"},
+			{Number: 3, Text: "Page 3 content"},
+			{Number: 4, Text: "Page 4 content"},
+			{Number: 5, Text: "Page 5 content"},
+			{Number: 6, Text: "Page 6 content"},
+			{Number: 7, Text: "Page 7 content"},
+			{Number: 8, Text: "Page 8 content"},
+			{Number: 9, Text: "Page 9 content"},
+			{Number: 10, Text: "Page 10 content"},
+		},
+	}
+
+	ctx := context.Background()
+	err = gen.generateAllSummaries(ctx, root)
+	assert.NoError(t, err)
+
+	// Should have called GenerateSummary 4 times for all 4 nodes
+	assert.Equal(t, 4, callCount)
+
+	// All nodes should have summaries
+	assert.Equal(t, "Root document summary", root.Summary)
+	assert.Equal(t, "Child 1 section summary", child1.Summary)
+	assert.Equal(t, "Child 2 section summary", child2.Summary)
+	assert.Equal(t, "Section summary", child1.Children[0].Summary)
+}
+
+func TestGenerateAllSummaries_MissingPages(t *testing.T) {
+	cfg := config.DefaultConfig()
+	expectedSummary := "Node with missing pages summary"
+
+	mockLLM := &MockLLMClient{
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+			// Should only get text for existing pages
+			assert.Contains(t, text, "Page 1 content")
+			assert.Contains(t, text, "Page 3 content")
+			assert.NotContains(t, text, "Page 2") // Page 2 is missing
+			return expectedSummary, nil
+		},
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	// Create node that spans pages 1-3, but page 2 is missing
+	node := document.NewNode("Test Node", 1, 3)
+
+	// Set the document with missing page 2
+	gen.doc = &document.Document{
+		Pages: []document.Page{
+			{Number: 1, Text: "Page 1 content"},
+			{Number: 3, Text: "Page 3 content"},
+		},
+	}
+
+	ctx := context.Background()
+	err = gen.generateAllSummaries(ctx, node)
+	assert.NoError(t, err)
+
+	assert.Equal(t, expectedSummary, node.Summary)
+}
+
+func TestGenerateAllSummaries_EmptyText(t *testing.T) {
+	cfg := config.DefaultConfig()
+	summaryCallCount := 0
+
+	mockLLM := &MockLLMClient{
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+			summaryCallCount++
+			// Text should contain the newlines even if page content is empty
+			assert.Equal(t, "\n\n\n\n", text)
+			return "summary", nil
+		},
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	// Create node that spans pages with no text
+	node := document.NewNode("Empty Node", 1, 2)
+
+	// Set the document with empty pages
+	gen.doc = &document.Document{
+		Pages: []document.Page{
+			{Number: 1, Text: ""},
+			{Number: 2, Text: ""},
+		},
+	}
+
+	ctx := context.Background()
+	err = gen.generateAllSummaries(ctx, node)
+	assert.NoError(t, err)
+
+	// Should call GenerateSummary even with empty page text because of added newlines
+	assert.Equal(t, 1, summaryCallCount)
+	assert.Equal(t, "summary", node.Summary)
 }
