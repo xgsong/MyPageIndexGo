@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'  # 触发所有v开头的标签推送
   pull_request:
     branches: [ main, master ]
 
