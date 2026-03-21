@@ -172,3 +172,14 @@ func TestSaveIndexTree_UUIDPreservation(t *testing.T) {
 	assert.Equal(t, originalID, loadedTree.Root.ID)
 	assert.Equal(t, childOriginalID, loadedTree.Root.Children[0].ID)
 }
+
+func TestSaveJSON_MarshalError(t *testing.T) {
+	// Test with an unserializable type (channel) to trigger marshal error
+	badData := make(chan int)
+	tmpFile := filepath.Join(t.TempDir(), "test.json")
+
+	// We need to call the unexported saveJSON function, so use a wrapper
+	err := saveJSON(badData, tmpFile)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to marshal JSON")
+}

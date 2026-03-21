@@ -88,3 +88,68 @@ Another paragraph here.
 	assert.Contains(t, doc.Pages[0].Text, "Hello World")
 	assert.Contains(t, doc.Pages[0].Text, "Second Section")
 }
+
+func TestMarkdownParser_SupportedExtensions(t *testing.T) {
+	parser := NewMarkdownParser()
+	exts := parser.SupportedExtensions()
+	assert.ElementsMatch(t, []string{"md", "markdown", "txt"}, exts)
+}
+
+func TestMarkdownParser_Name(t *testing.T) {
+	parser := NewMarkdownParser()
+	assert.Equal(t, "Markdown", parser.Name())
+}
+
+func TestPDFParser_SupportedExtensions(t *testing.T) {
+	parser := NewPDFParser()
+	exts := parser.SupportedExtensions()
+	assert.ElementsMatch(t, []string{"pdf"}, exts)
+}
+
+func TestPDFParser_Name(t *testing.T) {
+	parser := NewPDFParser()
+	assert.Equal(t, "PDF", parser.Name())
+}
+
+func TestParserRegistry_Get_NonExistent(t *testing.T) {
+	registry := NewParserRegistry()
+	parser, ok := registry.Get("nonexistent")
+	assert.False(t, ok)
+	assert.Nil(t, parser)
+}
+
+func TestParserRegistry_RegisterAndGet(t *testing.T) {
+	registry := NewParserRegistry()
+	parser := NewMarkdownParser()
+
+	registry.Register("md", parser)
+
+	// Test with lowercase extension
+	foundParser, ok := registry.Get("md")
+	assert.True(t, ok)
+	assert.Equal(t, parser, foundParser)
+
+	// Test with uppercase extension
+	foundParser, ok = registry.Get("MD")
+	assert.True(t, ok)
+	assert.Equal(t, parser, foundParser)
+
+	// Test with extension with dot
+	foundParser, ok = registry.Get(".md")
+	assert.True(t, ok)
+	assert.Equal(t, parser, foundParser)
+}
+
+func TestDefaultRegistry(t *testing.T) {
+	registry := DefaultRegistry()
+	assert.NotNil(t, registry)
+
+	// Should have PDF and Markdown parsers registered
+	pdfParser, ok := registry.Get("pdf")
+	assert.True(t, ok)
+	assert.Equal(t, "PDF", pdfParser.Name())
+
+	mdParser, ok := registry.Get("md")
+	assert.True(t, ok)
+	assert.Equal(t, "Markdown", mdParser.Name())
+}
