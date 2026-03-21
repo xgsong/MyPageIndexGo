@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write  # 允许创建Release和上传资产
+  pull-requests: read  # 生成release notes需要读取PR信息
 
 jobs:
   build:
