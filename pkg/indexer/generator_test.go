@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -78,9 +79,12 @@ func TestGenerate_MultipleGroups(t *testing.T) {
 	// Lower the max tokens to force multiple groups
 	cfg.MaxTokensPerNode = 20
 
+	var mu sync.Mutex
 	callCount := 0
 	mockLLM := &MockLLMClient{
 		GenerateStructureFunc: func(ctx context.Context, text string) (*document.Node, error) {
+			mu.Lock()
+			defer mu.Unlock()
 			callCount++
 			if callCount == 1 {
 				root := document.NewNode("Group 1", 1, 2)
