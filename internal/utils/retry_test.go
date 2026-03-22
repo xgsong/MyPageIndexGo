@@ -120,3 +120,37 @@ func TestCalculateDelay(t *testing.T) {
 		})
 	}
 }
+
+func TestDoRetry_StopRetry(t *testing.T) {
+	callCount := 0
+	permanentErr := errors.New("permanent error, no retry")
+
+	fn := func() error {
+		callCount++
+		// Return stop retry error after first attempt
+		return StopRetry(permanentErr)
+	}
+
+	ctx := context.Background()
+	config := DefaultRetryConfig()
+	config.MaxRetries = 5
+	config.BaseDelay = 10 * time.Millisecond
+
+	err := DoRetry(ctx, config, fn)
+	assert.Error(t, err)
+	assert.Equal(t, permanentErr, err)
+	assert.Equal(t, 1, callCount) // Should only be called once, no retries
+}
+
+func TestStopRetry_Unwrap(t *testing.T) {
+	originalErr := errors.New("original error")
+	wrappedErr := StopRetry(originalErr)
+
+	assert.True(t, errors.Is(wrappedErr, originalErr))
+	assert.Equal(t, originalErr.Error(), wrappedErr.Error())
+
+	// Test that errors.As works
+	var stopErr *stopRetryError
+	assert.True(t, errors.As(wrappedErr, &stopErr))
+	assert.Equal(t, originalErr, stopErr.err)
+}

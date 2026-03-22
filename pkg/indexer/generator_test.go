@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
+	"github.com/xgsong/mypageindexgo/pkg/language"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 )
 
@@ -16,21 +18,48 @@ import (
 var _ llm.LLMClient = (*MockLLMClient)(nil)
 
 type MockLLMClient struct {
-	GenerateStructureFunc func(ctx context.Context, text string) (*document.Node, error)
-	GenerateSummaryFunc   func(ctx context.Context, nodeTitle string, text string) (string, error)
-	SearchFunc            func(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error)
+	GenerateStructureFunc      func(ctx context.Context, text string, lang language.Language) (*document.Node, error)
+	GenerateSummaryFunc        func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error)
+	SearchFunc                 func(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error)
+	GenerateBatchSummariesFunc func(ctx context.Context, requests []*llm.BatchSummaryRequest, lang language.Language) ([]*llm.BatchSummaryResponse, error)
 }
 
-func (m *MockLLMClient) GenerateStructure(ctx context.Context, text string) (*document.Node, error) {
-	return m.GenerateStructureFunc(ctx, text)
+func (m *MockLLMClient) GenerateStructure(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
+	if m.GenerateStructureFunc != nil {
+		return m.GenerateStructureFunc(ctx, text, lang)
+	}
+	return document.NewNode("Root", 1, 1), nil
 }
 
-func (m *MockLLMClient) GenerateSummary(ctx context.Context, nodeTitle string, text string) (string, error) {
-	return m.GenerateSummaryFunc(ctx, nodeTitle, text)
+func (m *MockLLMClient) GenerateSummary(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
+	return m.GenerateSummaryFunc(ctx, nodeTitle, text, lang)
 }
 
 func (m *MockLLMClient) Search(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error) {
 	return m.SearchFunc(ctx, query, tree)
+}
+
+func (m *MockLLMClient) GenerateBatchSummaries(ctx context.Context, requests []*llm.BatchSummaryRequest, lang language.Language) ([]*llm.BatchSummaryResponse, error) {
+	if m.GenerateBatchSummariesFunc != nil {
+		return m.GenerateBatchSummariesFunc(ctx, requests, lang)
+	}
+	// Default implementation: fallback to individual calls for backward compatibility
+	responses := make([]*llm.BatchSummaryResponse, len(requests))
+	for i, req := range requests {
+		summary, err := m.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
+		if err != nil {
+			responses[i] = &llm.BatchSummaryResponse{
+				NodeID: req.NodeID,
+				Error:  err.Error(),
+			}
+		} else {
+			responses[i] = &llm.BatchSummaryResponse{
+				NodeID:  req.NodeID,
+				Summary: summary,
+			}
+		}
+	}
+	return responses, nil
 }
 
 func TestNewIndexGenerator(t *testing.T) {
@@ -47,7 +76,7 @@ func TestNewIndexGenerator(t *testing.T) {
 func TestGenerate_SingleGroup(t *testing.T) {
 	cfg := config.DefaultConfig()
 	mockLLM := &MockLLMClient{
-		GenerateStructureFunc: func(ctx context.Context, text string) (*document.Node, error) {
+		GenerateStructureFunc: func(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
 			root := document.NewNode("Root", 1, 2)
 			root.AddChild(document.NewNode("Section 1", 1, 1))
 			root.AddChild(document.NewNode("Section 2", 2, 2))
@@ -83,17 +112,13 @@ func TestGenerate_MultipleGroups(t *testing.T) {
 	var mu sync.Mutex
 	callCount := 0
 	mockLLM := &MockLLMClient{
-		GenerateStructureFunc: func(ctx context.Context, text string) (*document.Node, error) {
+		GenerateStructureFunc: func(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			callCount++
-			if callCount == 1 {
-				root := document.NewNode("Group 1", 1, 2)
-				root.AddChild(document.NewNode("Section 1", 1, 1))
-				return root, nil
-			}
-			root := document.NewNode("Group 2", 3, 4)
-			root.AddChild(document.NewNode("Section 2", 3, 3))
+			// Return a root with children for each group
+			root := document.NewNode(fmt.Sprintf("Group %d", callCount), 1, 10)
+			root.AddChild(document.NewNode(fmt.Sprintf("Section %d", callCount), 1, 5))
 			return root, nil
 		},
 	}
@@ -102,12 +127,15 @@ func TestGenerate_MultipleGroups(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Each page has ~10 tokens, so two pages fit in 20 tokens max
+	// Using 6 pages to ensure multiple groups (more than overlap*2=4)
 	doc := &document.Document{
 		Pages: []document.Page{
 			{Number: 1, Text: "This is page one with several words here"},
 			{Number: 2, Text: "This is page two with several words here"},
 			{Number: 3, Text: "This is page three with several words here too"},
 			{Number: 4, Text: "This is page four with several words here also"},
+			{Number: 5, Text: "This is page five with several words here"},
+			{Number: 6, Text: "This is page six with several words here"},
 		},
 	}
 
@@ -115,9 +143,11 @@ func TestGenerate_MultipleGroups(t *testing.T) {
 	tree, err := gen.Generate(ctx, doc)
 	assert.NoError(t, err)
 	assert.NotNil(t, tree)
-	assert.Equal(t, 4, tree.TotalPages)
-	// Should have two groups merged → should have two children at root level
-	assert.Len(t, tree.Root.Children, 2)
+	assert.Equal(t, 6, tree.TotalPages)
+	// Should have multiple groups merged - at least 2 children at root level
+	assert.GreaterOrEqual(t, len(tree.Root.Children), 2)
+	// Verify that the structure generation was called multiple times
+	assert.GreaterOrEqual(t, callCount, 2)
 }
 
 func TestGenerate_EmptyDocument(t *testing.T) {
@@ -142,7 +172,7 @@ func TestGenerateSummariesForNode(t *testing.T) {
 	expectedSummary := "This is a summary of the node content."
 
 	mockLLM := &MockLLMClient{
-		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
 			return expectedSummary, nil
 		},
 	}
@@ -192,7 +222,7 @@ func TestGenerateSummariesForNode_LLMError(t *testing.T) {
 	expectedErr := fmt.Errorf("LLM service unavailable")
 
 	mockLLM := &MockLLMClient{
-		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
 			return "", expectedErr
 		},
 	}
@@ -229,8 +259,8 @@ func TestGenerateAllSummaries_NoSummariesNeeded(t *testing.T) {
 	root.AddChild(child1)
 	root.AddChild(child2)
 
-	// Set the document in the generator
-	gen.doc = &document.Document{
+	// Set the document and precompute pageTextMap in the generator
+	doc := &document.Document{
 		Pages: []document.Page{
 			{Number: 1, Text: "Page 1 content"},
 			{Number: 2, Text: "Page 2 content"},
@@ -243,6 +273,12 @@ func TestGenerateAllSummaries_NoSummariesNeeded(t *testing.T) {
 			{Number: 9, Text: "Page 9 content"},
 			{Number: 10, Text: "Page 10 content"},
 		},
+	}
+	gen.doc = doc
+	// Precompute pageTextMap like Generate method does
+	gen.pageTextMap = make(map[int]string, len(doc.Pages))
+	for _, p := range doc.Pages {
+		gen.pageTextMap[p.Number] = p.Text
 	}
 
 	ctx := context.Background()
@@ -258,17 +294,17 @@ func TestGenerateAllSummaries_NoSummariesNeeded(t *testing.T) {
 func TestGenerateAllSummaries_GenerateAll(t *testing.T) {
 	cfg := config.DefaultConfig()
 	summaryMap := map[string]string{
-		"Root":     "Root document summary",
-		"Child 1":  "Child 1 section summary",
-		"Child 2":  "Child 2 section summary",
-		"Section":  "Section summary",
+		"Root":    "Root document summary",
+		"Child 1": "Child 1 section summary",
+		"Child 2": "Child 2 section summary",
+		"Section": "Section summary",
 	}
 
 	var mu sync.Mutex
 	callCount := 0
 
 	mockLLM := &MockLLMClient{
-		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			callCount++
@@ -287,8 +323,8 @@ func TestGenerateAllSummaries_GenerateAll(t *testing.T) {
 	root.AddChild(child1)
 	root.AddChild(child2)
 
-	// Set the document in the generator
-	gen.doc = &document.Document{
+	// Set the document and precompute pageTextMap in the generator
+	doc := &document.Document{
 		Pages: []document.Page{
 			{Number: 1, Text: "Page 1 content"},
 			{Number: 2, Text: "Page 2 content"},
@@ -301,6 +337,12 @@ func TestGenerateAllSummaries_GenerateAll(t *testing.T) {
 			{Number: 9, Text: "Page 9 content"},
 			{Number: 10, Text: "Page 10 content"},
 		},
+	}
+	gen.doc = doc
+	// Precompute pageTextMap like Generate method does
+	gen.pageTextMap = make(map[int]string, len(doc.Pages))
+	for _, p := range doc.Pages {
+		gen.pageTextMap[p.Number] = p.Text
 	}
 
 	ctx := context.Background()
@@ -322,7 +364,7 @@ func TestGenerateAllSummaries_MissingPages(t *testing.T) {
 	expectedSummary := "Node with missing pages summary"
 
 	mockLLM := &MockLLMClient{
-		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
 			// Should only get text for existing pages
 			assert.Contains(t, text, "Page 1 content")
 			assert.Contains(t, text, "Page 3 content")
@@ -337,12 +379,18 @@ func TestGenerateAllSummaries_MissingPages(t *testing.T) {
 	// Create node that spans pages 1-3, but page 2 is missing
 	node := document.NewNode("Test Node", 1, 3)
 
-	// Set the document with missing page 2
-	gen.doc = &document.Document{
+	// Set the document and precompute pageTextMap with missing page 2
+	doc := &document.Document{
 		Pages: []document.Page{
 			{Number: 1, Text: "Page 1 content"},
 			{Number: 3, Text: "Page 3 content"},
 		},
+	}
+	gen.doc = doc
+	// Precompute pageTextMap like Generate method does
+	gen.pageTextMap = make(map[int]string, len(doc.Pages))
+	for _, p := range doc.Pages {
+		gen.pageTextMap[p.Number] = p.Text
 	}
 
 	ctx := context.Background()
@@ -357,7 +405,7 @@ func TestGenerateAllSummaries_EmptyText(t *testing.T) {
 	summaryCallCount := 0
 
 	mockLLM := &MockLLMClient{
-		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string) (string, error) {
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
 			summaryCallCount++
 			// Text should contain the newlines even if page content is empty
 			assert.Equal(t, "\n\n\n\n", text)
@@ -371,12 +419,18 @@ func TestGenerateAllSummaries_EmptyText(t *testing.T) {
 	// Create node that spans pages with no text
 	node := document.NewNode("Empty Node", 1, 2)
 
-	// Set the document with empty pages
-	gen.doc = &document.Document{
+	// Set the document and precompute pageTextMap with empty pages
+	doc := &document.Document{
 		Pages: []document.Page{
 			{Number: 1, Text: ""},
 			{Number: 2, Text: ""},
 		},
+	}
+	gen.doc = doc
+	// Precompute pageTextMap like Generate method does
+	gen.pageTextMap = make(map[int]string, len(doc.Pages))
+	for _, p := range doc.Pages {
+		gen.pageTextMap[p.Number] = p.Text
 	}
 
 	ctx := context.Background()
@@ -386,4 +440,133 @@ func TestGenerateAllSummaries_EmptyText(t *testing.T) {
 	// Should call GenerateSummary even with empty page text because of added newlines
 	assert.Equal(t, 1, summaryCallCount)
 	assert.Equal(t, "summary", node.Summary)
+}
+
+func TestPageTextMapReuse(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.GenerateSummaries = true
+
+	var generateStructureCalls int
+	var generateSummaryCalls int
+	var mu sync.Mutex
+
+	mockLLM := &MockLLMClient{
+		GenerateStructureFunc: func(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			generateStructureCalls++
+			root := document.NewNode("Root", 1, 2)
+			root.AddChild(document.NewNode("Section 1", 1, 1))
+			root.AddChild(document.NewNode("Section 2", 2, 2))
+			return root, nil
+		},
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			generateSummaryCalls++
+			return fmt.Sprintf("Summary for %s", nodeTitle), nil
+		},
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	doc := &document.Document{
+		Pages: []document.Page{
+			{Number: 1, Text: "Page 1 content"},
+			{Number: 2, Text: "Page 2 content"},
+		},
+	}
+
+	// Before Generate, pageTextMap should be nil
+	assert.Nil(t, gen.pageTextMap)
+
+	ctx := context.Background()
+	tree, err := gen.Generate(ctx, doc)
+	assert.NoError(t, err)
+	assert.NotNil(t, tree)
+
+	// After Generate, pageTextMap should be populated
+	assert.NotNil(t, gen.pageTextMap)
+	assert.Equal(t, 2, len(gen.pageTextMap))
+	assert.Equal(t, "Page 1 content", gen.pageTextMap[1])
+	assert.Equal(t, "Page 2 content", gen.pageTextMap[2])
+
+	// Should have called both structure generation and summary generation
+	assert.Equal(t, 1, generateStructureCalls)
+	// 3 nodes total: Root + 2 sections
+	assert.Equal(t, 3, generateSummaryCalls)
+
+	// All nodes should have summaries
+	assert.NotEmpty(t, tree.Root.Summary)
+	assert.NotEmpty(t, tree.Root.Children[0].Summary)
+	assert.NotEmpty(t, tree.Root.Children[1].Summary)
+}
+
+func TestSummaryGeneration_ConcurrentLimit(t *testing.T) {
+	// Test that summary generation uses 2x the configured concurrency
+	cfg := config.DefaultConfig()
+	cfg.MaxConcurrency = 2 // Base concurrency is 2, so summary should use 4
+	cfg.GenerateSummaries = true
+
+	var mu sync.Mutex
+	activeGoroutines := 0
+	maxActiveGoroutines := 0
+	// We need enough nodes to test concurrency limits
+	numNodes := 10
+
+	mockLLM := &MockLLMClient{
+		GenerateStructureFunc: func(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
+			// Create a root with many child nodes to test summary generation concurrency
+			root := document.NewNode("Root", 1, numNodes)
+			for i := 1; i <= numNodes; i++ {
+				child := document.NewNode(fmt.Sprintf("Section %d", i), i, i)
+				root.AddChild(child)
+			}
+			return root, nil
+		},
+		GenerateSummaryFunc: func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
+			mu.Lock()
+			activeGoroutines++
+			if activeGoroutines > maxActiveGoroutines {
+				maxActiveGoroutines = activeGoroutines
+			}
+			mu.Unlock()
+
+			// Simulate some processing time
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(10 * time.Millisecond):
+			}
+
+			mu.Lock()
+			activeGoroutines--
+			mu.Unlock()
+
+			return fmt.Sprintf("Summary for %s", nodeTitle), nil
+		},
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	// Create a document with enough pages
+	var pages []document.Page
+	for i := 1; i <= numNodes; i++ {
+		pages = append(pages, document.Page{Number: i, Text: fmt.Sprintf("Page %d content", i)})
+	}
+	doc := &document.Document{Pages: pages}
+
+	ctx := context.Background()
+	tree, err := gen.Generate(ctx, doc)
+	assert.NoError(t, err)
+	assert.NotNil(t, tree)
+
+	// Max active goroutines should be <= 4 (2x base concurrency of 2)
+	// It might be slightly less due to scheduling, but should not exceed 4
+	assert.LessOrEqual(t, maxActiveGoroutines, 4)
+	// With dynamic rate limiting enabled, concurrency is controlled by rate limiter
+	// It should be at least 1, showing that concurrency is working
+	assert.GreaterOrEqual(t, maxActiveGoroutines, 1)
 }

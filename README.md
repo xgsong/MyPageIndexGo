@@ -118,6 +118,8 @@ export PAGEINDEX_GENERATE_SUMMARIES=false                            # Default: 
 export PAGEINDEX_LOG_LEVEL=info                                      # Default: info
 export PAGEINDEX_ENABLE_CACHE=true                                   # Enable LLM response caching (default: true)
 export PAGEINDEX_CACHE_TTL=3600                                      # Cache TTL in seconds (default: 3600)
+export PAGEINDEX_ENABLE_BATCH_CALLS=true                             # Enable batch LLM calls for summary generation (default: true)
+export PAGEINDEX_BATCH_SIZE=10                                       # Number of summaries per batch call (default: 10)
 ```
 
 ## Usage
@@ -146,6 +148,23 @@ export PAGEINDEX_CACHE_TTL=3600                                      # Cache TTL
 
 Options:
 - `--output result.json` - Save search result to JSON
+
+### Update (Incremental Indexing)
+
+```bash
+# Add new PDF document to existing index
+./pageindex update --existing index.json --pdf new_document.pdf --output merged_index.json
+
+# Add new Markdown document to existing index
+./pageindex update --existing index.json --md new_document.md --output merged_index.json
+```
+
+Options:
+- `--existing index.json` - Path to existing index file (required)
+- `--pdf new.pdf` / `--md new.md` - Path to new document to add (one required)
+- `--output merged.json` - Output path for the merged index (default: merged_index.json)
+- `--model gpt-4o-mini` - Custom model to use for generating new index
+- `--max-concurrency 10` - Maximum concurrent LLM calls
 
 ## Example
 
@@ -241,13 +260,14 @@ We are continuously optimizing performance to handle even larger workloads:
 
 | Optimization | Expected Improvement | Status |
 |--------------|----------------------|--------|
-| LLM call caching | 30%-70% reduction in API calls, 2x-5x faster repeated processing | 🚧 In Progress |
-| Exponential backoff retry | 99%+ API call success rate | 🚧 In Progress |
-| Node ID hash index | 10x-100x faster node lookup during search | 🚧 In Progress |
-| Dynamic concurrency control | 30%-100% faster index generation, better API quota utilization | 📋 Planned |
+| LLM call caching | 30%-70% reduction in API calls, 2x-5x faster repeated processing | ✅ Completed |
+| Exponential backoff retry | 99%+ API call success rate | ✅ Completed |
+| Node ID hash index | 10x-100x faster node lookup during search | ✅ Completed |
+| Dynamic concurrency control | 30%-100% faster index generation, better API quota utilization | ✅ Completed |
+| Index tree serialization optimization | 2x-5x faster serialization/deserialization, 30% lower memory usage | ✅ Completed |
+| Batch LLM calls | 50%-70% reduction in API calls for summary generation | ✅ Completed |
+| Incremental index support | 10x-100x faster index updates, no need for full re-generation | ✅ Completed |
 | Streaming document processing | 40%-60% lower memory usage, support for GB-sized documents | 📋 Planned |
-| Batch LLM calls | 50%-70% reduction in API calls for summary generation | 📋 Planned |
-| Local lightweight model acceleration | 50%-80% lower API cost, 60%-90% lower latency (with GPU) | 📋 Planned |
 
 After all optimizations are implemented, PageIndex will be able to:
 - Process 10GB+ sized documents with <1GB memory footprint
@@ -439,6 +459,8 @@ export PAGEINDEX_GENERATE_SUMMARIES=false                            # 默认: f
 export PAGEINDEX_LOG_LEVEL=info                                      # 默认: info
 export PAGEINDEX_ENABLE_CACHE=true                                   # 启用 LLM 响应缓存 (默认: true)
 export PAGEINDEX_CACHE_TTL=3600                                      # 缓存有效期，单位秒 (默认: 3600)
+export PAGEINDEX_ENABLE_BATCH_CALLS=true                             # 启用摘要生成批量 LLM 调用 (默认: true)
+export PAGEINDEX_BATCH_SIZE=10                                       # 每批调用包含的摘要数量 (默认: 10)
 ```
 
 ## 使用说明
@@ -467,6 +489,23 @@ export PAGEINDEX_CACHE_TTL=3600                                      # 缓存有
 
 选项：
 - `--output result.json` - 将搜索结果保存为JSON文件
+
+### 增量更新索引
+
+```bash
+# 添加新的PDF文档到现有索引
+./pageindex update --existing index.json --pdf 新文档.pdf --output 合并后索引.json
+
+# 添加新的Markdown文档到现有索引
+./pageindex update --existing index.json --md 新文档.md --output 合并后索引.json
+```
+
+选项：
+- `--existing index.json` - 现有索引文件路径（必需）
+- `--pdf 新文档.pdf` / `--md 新文档.md` - 要添加的新文档路径（二选一）
+- `--output 合并后索引.json` - 合并后索引的输出路径（默认：merged_index.json）
+- `--model gpt-4o-mini` - 生成新索引时使用的自定义模型
+- `--max-concurrency 10` - 最大并发 LLM 调用数
 
 ## 架构
 
@@ -541,17 +580,19 @@ mypageindexgo/
 - [x] 结构化日志
 - [x] 90%+ 测试覆盖率
 
-### 第二阶段：增强功能（进行中）
+### 第二阶段：增强功能（已完成大部分）
 - [x] 指数退避重试逻辑 ✅
 - [x] LLM 调用缓存，支持重复处理加速 ✅
 - [x] 节点 ID 哈希索引，提升搜索速度 ✅
+- [x] 动态并发控制与速率限制自适应 ✅
+- [x] 摘要生成批量 LLM 调用 ✅
+- [x] 索引树序列化优化，提升读写速度 ✅
+- [x] 增量索引支持，避免全量重新生成 ✅
 - [ ] 更多文档格式（DOCX、HTML、EPUB）
 - [ ] 多 LLM 提供商支持（Anthropic、Google、本地模型）
-- [ ] 动态并发控制与速率限制自适应
 - [ ] 流式文档处理，支持大文件
 - [ ] 批量文档处理
 - [ ] 索引版本控制和迁移
-- [ ] 摘要生成批量 LLM 调用
 
 ### 第三阶段：存储后端适配器（计划中）
 索引存储将抽象为支持多种后端：

@@ -38,21 +38,23 @@ func TestFindNodesByID(t *testing.T) {
 	root.AddChild(child1)
 	root.AddChild(child2)
 
+	tree := document.NewIndexTree(root, 10)
+
 	// Test finding existing nodes
 	ids := []string{child1.ID, child2.ID}
-	nodes := findNodesByID(root, ids)
+	nodes := findNodesByID(tree, ids)
 	assert.Len(t, nodes, 2)
 	assert.Contains(t, nodes, child1)
 	assert.Contains(t, nodes, child2)
 
 	// Test finding non-existent node
 	ids = []string{"non-existent-id", child1.ID}
-	nodes = findNodesByID(root, ids)
+	nodes = findNodesByID(tree, ids)
 	assert.Len(t, nodes, 1)
 	assert.Contains(t, nodes, child1)
 
 	// Test empty IDs
-	nodes = findNodesByID(root, []string{})
+	nodes = findNodesByID(tree, []string{})
 	assert.Len(t, nodes, 0)
 }
 

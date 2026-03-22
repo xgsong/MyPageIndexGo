@@ -1,11 +1,11 @@
 package output
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/bytedance/sonic"
 	"github.com/xgsong/mypageindexgo/pkg/document"
 )
 
@@ -29,9 +29,12 @@ func LoadIndexTree(path string) (*document.IndexTree, error) {
 	}
 
 	var tree document.IndexTree
-	if err := json.Unmarshal(data, &tree); err != nil {
+	if err := sonic.Unmarshal(data, &tree); err != nil {
 		return nil, fmt.Errorf("failed to parse index JSON: %w", err)
 	}
+
+	// Rebuild the node map after loading from JSON
+	tree.BuildNodeMap()
 
 	return &tree, nil
 }
@@ -45,7 +48,7 @@ func saveJSON(data interface{}, path string) error {
 	}
 
 	// Marshal with indentation for readability
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	jsonData, err := sonic.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}

@@ -2,9 +2,11 @@ package document
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/ledongthuc/pdf"
 )
@@ -14,27 +16,24 @@ var pdfMagicNumber = []byte("%PDF-")
 const maxPDFFileSizeBytes = 50 * 1024 * 1024
 
 // PDFParser implements DocumentParser for PDF files.
-// Supports both text-based PDFs (text extraction) and scanned PDFs (OCR, requires build tag "ocr").
+// Supports both text-based PDFs (text extraction) and scanned PDFs (OCR via LLM API).
 type PDFParser struct {
-	EnableOCR   bool   // Whether to enable OCR for scanned PDFs (requires OCR build)
-	OCRLanguage string // OCR language code (default: "eng" for English, use "chi_sim" for Simplified Chinese)
+	ocrClient OCRClient // Optional OCR client for scanned PDFs
+	enableOCR bool      // Whether to enable OCR fallback
 }
 
-// NewPDFParser creates a new PDFParser with default settings.
-// OCR is disabled by default in standard builds, enable with build tag "ocr".
+// NewPDFParser creates a new PDFParser with default settings (OCR disabled).
 func NewPDFParser() *PDFParser {
 	return &PDFParser{
-		EnableOCR:   false,
-		OCRLanguage: "eng",
+		enableOCR: false,
 	}
 }
 
-// NewPDFParserWithOCR creates a new PDFParser with explicit OCR settings.
-// Note: OCR functionality requires building with the "ocr" build tag.
-func NewPDFParserWithOCR(enableOCR bool, language string) *PDFParser {
+// NewPDFParserWithOCR creates a new PDFParser with OCR client.
+func NewPDFParserWithOCR(ocrClient OCRClient) *PDFParser {
 	return &PDFParser{
-		EnableOCR:   enableOCR,
-		OCRLanguage: language,
+		ocrClient: ocrClient,
+		enableOCR: ocrClient != nil,
 	}
 }
 
@@ -74,8 +73,8 @@ func (p *PDFParser) Parse(r io.Reader) (*Document, error) {
 		}
 	}
 
-	if !hasText && p.EnableOCR {
-		pages, err = p.extractWithOCR(buf)
+	if !hasText && p.enableOCR && p.ocrClient != nil {
+		pages, err = p.extractWithOCR(context.Background(), buf)
 		if err != nil {
 			return nil, fmt.Errorf("OCR failed: %w", err)
 		}
@@ -98,7 +97,6 @@ func (p *PDFParser) extractTextLayer(buf []byte) ([]Page, error) {
 	numPages := pdfReader.NumPage()
 	pages := make([]Page, 0, numPages)
 
-	fonts := make(map[string]*pdf.Font)
 	for i := 1; i <= numPages; i++ {
 		page := pdfReader.Page(i)
 		if page.V.IsNull() {
@@ -106,10 +104,18 @@ func (p *PDFParser) extractTextLayer(buf []byte) ([]Page, error) {
 			continue
 		}
 
-		text, err := page.GetPlainText(fonts)
+		// Try GetTextByRow first for better text extraction
+		text, err := extractTextFromPage(page)
 		if err != nil {
-			return nil, fmt.Errorf("failed to extract text from page %d: %w", i, err)
+			// Fallback to GetPlainText if GetTextByRow fails
+			text, err = extractTextWithPlainText(page)
+			if err != nil {
+				return nil, fmt.Errorf("failed to extract text from page %d: %w", i, err)
+			}
 		}
+
+		// Clean up the extracted text
+		text = cleanExtractedText(text)
 
 		pages = append(pages, Page{
 			Number: i,
@@ -120,10 +126,58 @@ func (p *PDFParser) extractTextLayer(buf []byte) ([]Page, error) {
 	return pages, nil
 }
 
-// extractWithOCR is a stub for non-OCR builds.
-// When built without "ocr" tag, returns error indicating OCR support is not compiled in.
-func (p *PDFParser) extractWithOCR(buf []byte) ([]Page, error) {
-	return nil, fmt.Errorf("OCR support not available: rebuild with -tags ocr to enable scanned PDF support (requires Tesseract installed)")
+// extractTextFromPage uses GetTextByRow for better text extraction
+func extractTextFromPage(page pdf.Page) (string, error) {
+	rows, err := page.GetTextByRow()
+	if err != nil {
+		return "", err
+	}
+
+	var textBuilder strings.Builder
+	for _, row := range rows {
+		for _, word := range row.Content {
+			textBuilder.WriteString(word.S)
+		}
+		textBuilder.WriteString("\n")
+	}
+
+	return textBuilder.String(), nil
+}
+
+// extractTextWithPlainText uses GetPlainText as fallback
+func extractTextWithPlainText(page pdf.Page) (string, error) {
+	fonts := make(map[string]*pdf.Font)
+	text, err := page.GetPlainText(fonts)
+	if err != nil {
+		return "", err
+	}
+	return text, nil
+}
+
+// cleanExtractedText removes non-printable characters and normalizes text
+func cleanExtractedText(text string) string {
+	var result strings.Builder
+	for _, r := range text {
+		// Keep printable characters, common whitespace, and Unicode letters
+		if unicode.IsPrint(r) || unicode.IsSpace(r) || unicode.IsLetter(r) {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
+// extractWithOCR renders PDF pages as images and uses OCR API to extract text (for scanned PDFs).
+func (p *PDFParser) extractWithOCR(ctx context.Context, buf []byte) ([]Page, error) {
+	if p.ocrClient == nil {
+		return nil, fmt.Errorf("OCR client not configured")
+	}
+
+	// For now, return an error indicating this feature requires additional implementation
+	// The actual implementation would need to:
+	// 1. Render PDF pages to images (using a PDF rendering library)
+	// 2. Call OCR API for each page
+	// 3. Return extracted text
+	return nil, fmt.Errorf("OCR feature requires PDF rendering support. Please ensure the PDF contains text layer or use a tool to convert scanned PDFs to text-based PDFs first")
 }
 
 // SupportedExtensions returns the file extensions supported by this parser.

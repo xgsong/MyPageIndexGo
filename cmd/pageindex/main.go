@@ -79,6 +79,42 @@ func main() {
 				},
 				Action: searchAction,
 			},
+			{
+				Name:  "update",
+				Usage: "Update an existing index with new document content",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "existing",
+						Usage:    "Path to existing index JSON file",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:  "pdf",
+						Usage: "Path to new PDF file to add",
+					},
+					&cli.StringFlag{
+						Name:  "md",
+						Usage: "Path to new Markdown file to add",
+					},
+					&cli.StringFlag{
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "Output JSON file path for the merged index",
+						Value:   "merged_index.json",
+					},
+					&cli.StringFlag{
+						Name:  "model",
+						Usage: "OpenAI model to use",
+						Value: "gpt-4o",
+					},
+					&cli.IntFlag{
+						Name:  "max-concurrency",
+						Usage: "Maximum concurrent LLM calls",
+						Value: 5,
+					},
+				},
+				Action: updateAction,
+			},
 		},
 	}
 
@@ -123,7 +159,13 @@ func generateAction(c *cli.Context) error {
 
 	if pdfPath != "" {
 		inputPath = pdfPath
-		parser = document.NewPDFParser()
+		// Create OCR client if OCR is enabled
+		var ocrClient document.OCRClient
+		if cfg.OCREnabled {
+			ocrClient = llm.NewOpenAIOCRClient(cfg)
+			log.Info().Str("model", cfg.OCRModel).Msg("OCR enabled for scanned PDFs")
+		}
+		parser = document.NewPDFParserWithOCR(ocrClient)
 		log.Info().Str("file", inputPath).Msg("Parsing PDF document")
 	} else {
 		inputPath = mdPath
@@ -146,7 +188,14 @@ func generateAction(c *cli.Context) error {
 	log.Info().Int("pages", len(doc.Pages)).Msg("Document parsed successfully")
 
 	// Create LLM client
-	llmClient := llm.NewOpenAIClient(cfg)
+	var llmClient llm.LLMClient = llm.NewOpenAIClient(cfg)
+
+	// Wrap with cache if enabled
+	if cfg.EnableLLMCache {
+		ttl := time.Duration(cfg.LLMCacheTTL) * time.Second
+		llmClient = llm.NewCachedLLMClient(llmClient, ttl)
+		log.Info().Dur("ttl", ttl).Msg("LLM cache enabled")
+	}
 
 	// Create index generator
 	generator, err := indexer.NewIndexGenerator(cfg, llmClient)
@@ -209,7 +258,14 @@ func searchAction(c *cli.Context) error {
 	log.Info().Int("nodes", tree.CountAllNodes()).Msg("Index loaded successfully")
 
 	// Create LLM client
-	llmClient := llm.NewOpenAIClient(cfg)
+	var llmClient llm.LLMClient = llm.NewOpenAIClient(cfg)
+
+	// Wrap with cache if enabled
+	if cfg.EnableLLMCache {
+		ttl := time.Duration(cfg.LLMCacheTTL) * time.Second
+		llmClient = llm.NewCachedLLMClient(llmClient, ttl)
+		log.Info().Dur("ttl", ttl).Msg("LLM cache enabled")
+	}
 
 	// Create searcher
 	searcher := indexer.NewSearcher(llmClient)
@@ -258,6 +314,128 @@ func formatPageRange(start, end int) string {
 	return fmt.Sprintf("pages %d-%d", start, end)
 }
 
+// updateAction handles the update command for incremental index updates
+func updateAction(c *cli.Context) error {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Override config with CLI flags
+	if c.IsSet("model") {
+		cfg.OpenAIModel = c.String("model")
+	}
+	if c.IsSet("max-concurrency") {
+		cfg.MaxConcurrency = c.Int("max-concurrency")
+	}
+
+	// Setup logging
+	logger := logging.Setup(cfg.LogLevel)
+	log.Logger = logger
+
+	// Validate input
+	existingIndexPath := c.String("existing")
+	pdfPath := c.String("pdf")
+	mdPath := c.String("md")
+
+	if pdfPath == "" && mdPath == "" {
+		return fmt.Errorf("either --pdf or --md must be specified for the new document")
+	}
+	if pdfPath != "" && mdPath != "" {
+		return fmt.Errorf("only one of --pdf or --md can be specified")
+	}
+
+	// Load existing index
+	log.Info().Str("index", existingIndexPath).Msg("Loading existing index")
+	existingTree, err := output.LoadIndexTree(existingIndexPath)
+	if err != nil {
+		return fmt.Errorf("failed to load existing index: %w", err)
+	}
+	log.Info().
+		Int("pages", existingTree.TotalPages).
+		Int("nodes", existingTree.CountAllNodes()).
+		Msg("Existing index loaded successfully")
+
+	// Determine input file and parser for the new document
+	var inputPath string
+	var parser document.DocumentParser
+
+	if pdfPath != "" {
+		inputPath = pdfPath
+		// Create OCR client if OCR is enabled
+		var ocrClient document.OCRClient
+		if cfg.OCREnabled {
+			ocrClient = llm.NewOpenAIOCRClient(cfg)
+			log.Info().Str("model", cfg.OCRModel).Msg("OCR enabled for scanned PDFs")
+		}
+		parser = document.NewPDFParserWithOCR(ocrClient)
+		log.Info().Str("file", inputPath).Msg("Parsing new PDF document")
+	} else {
+		inputPath = mdPath
+		parser = document.NewMarkdownParser()
+		log.Info().Str("file", inputPath).Msg("Parsing new Markdown document")
+	}
+
+	// Open and parse new document
+	file, err := os.Open(inputPath)
+	if err != nil {
+		return fmt.Errorf("failed to open new document: %w", err)
+	}
+	defer file.Close()
+
+	newDoc, err := parser.Parse(file)
+	if err != nil {
+		return fmt.Errorf("failed to parse new document: %w", err)
+	}
+	log.Info().Int("pages", len(newDoc.Pages)).Msg("New document parsed successfully")
+
+	// Create LLM client
+	var llmClient llm.LLMClient = llm.NewOpenAIClient(cfg)
+
+	// Wrap with cache if enabled
+	if cfg.EnableLLMCache {
+		ttl := time.Duration(cfg.LLMCacheTTL) * time.Second
+		llmClient = llm.NewCachedLLMClient(llmClient, ttl)
+		log.Info().Dur("ttl", ttl).Msg("LLM cache enabled")
+	}
+
+	// Create index generator
+	generator, err := indexer.NewIndexGenerator(cfg, llmClient)
+	if err != nil {
+		return fmt.Errorf("failed to create index generator: %w", err)
+	}
+
+	// Generate merged index
+	log.Info().Msg("Generating merged index...")
+	startTime := time.Now()
+
+	ctx := context.Background()
+	mergedTree, err := generator.Update(ctx, existingTree, newDoc)
+	if err != nil {
+		return fmt.Errorf("failed to update index: %w", err)
+	}
+
+	elapsed := time.Since(startTime)
+
+	// Save merged index
+	outputPath := c.String("output")
+	if err := output.SaveIndexTree(mergedTree, outputPath); err != nil {
+		return fmt.Errorf("failed to save merged index: %w", err)
+	}
+
+	// Print summary
+	fmt.Printf("\n✓ Index update complete!\n")
+	fmt.Printf("  • Original pages: %d\n", existingTree.TotalPages)
+	fmt.Printf("  • New pages added: %d\n", len(newDoc.Pages))
+	fmt.Printf("  • Total pages: %d\n", mergedTree.TotalPages)
+	fmt.Printf("  • Total nodes: %d\n", mergedTree.CountAllNodes())
+	fmt.Printf("  • Time elapsed: %.1fs\n", elapsed.Seconds())
+	fmt.Printf("  • Output saved to: %s\n", outputPath)
+
+	return nil
+}
+
 // init sets up zerolog for console output
 func init() {
 	// Use console writer for nicer output
@@ -267,4 +445,3 @@ func init() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	zerolog.TimeFieldFormat = time.RFC3339
 }
-

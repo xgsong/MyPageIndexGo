@@ -14,7 +14,7 @@ func TestPDFParser_Integration(t *testing.T) {
 	parser := NewPDFParser()
 
 	// Open the test PDF file
-	file, err := os.Open("../../test/fixtures/test_text.pdf")
+	file, err := os.Open("../../test/fixtures/test.pdf")
 	if err != nil {
 		t.Skip("Test PDF file not found, skipping integration test")
 	}
@@ -92,7 +92,7 @@ func TestMarkdownParser_Integration(t *testing.T) {
 	parser := NewMarkdownParser()
 
 	// Test with the sample markdown file
-	file, err := os.Open("../../test/fixtures/test_sample.md")
+	file, err := os.Open("../../test/fixtures/test.md")
 	if err != nil {
 		t.Skip("Test markdown file not found, skipping integration test")
 	}
@@ -102,7 +102,7 @@ func TestMarkdownParser_Integration(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, doc)
 	assert.Equal(t, 1, len(doc.Pages))
-	assert.Contains(t, doc.Pages[0].Text, "测试文档")
+	assert.Contains(t, doc.Pages[0].Text, "公司财务报告")
 }
 
 // TestParserRegistry_Integration tests the parser registry

@@ -2,10 +2,31 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"time"
 )
+
+// stopRetryError is a sentinel error used to stop retries.
+type stopRetryError struct {
+	err error
+}
+
+// Error implements the error interface.
+func (e *stopRetryError) Error() string {
+	return e.err.Error()
+}
+
+// Unwrap returns the underlying error.
+func (e *stopRetryError) Unwrap() error {
+	return e.err
+}
+
+// StopRetry wraps an error to indicate that retries should stop.
+func StopRetry(err error) error {
+	return &stopRetryError{err: err}
+}
 
 // RetryConfig configures retry behavior.
 type RetryConfig struct {
@@ -14,15 +35,17 @@ type RetryConfig struct {
 	MaxDelay        time.Duration
 	Multiplier      float64
 	RetryableErrors []string
+	EnableRetryAfter bool // Whether to respect Retry-After header
 }
 
 // DefaultRetryConfig returns a default retry configuration.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
-		MaxRetries: 3,
-		BaseDelay:  time.Second,
-		MaxDelay:   time.Minute,
-		Multiplier: 2.0,
+		MaxRetries:        5,
+		BaseDelay:         time.Second,
+		MaxDelay:          32 * time.Second,
+		Multiplier:        2.0,
+		EnableRetryAfter:  true,
 	}
 }
 
@@ -40,6 +63,12 @@ func DoRetry(ctx context.Context, config *RetryConfig, fn RetryableFunc) error {
 		err := fn()
 		if err == nil {
 			return nil
+		}
+
+		// Check if this is a stop retry error
+		var stopErr *stopRetryError
+		if errors.As(err, &stopErr) {
+			return stopErr.err
 		}
 
 		lastErr = err

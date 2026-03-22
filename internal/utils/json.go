@@ -1,9 +1,10 @@
 package utils
 
 import (
-	"encoding/json"
 	"regexp"
 	"strings"
+
+	"github.com/bytedance/sonic"
 )
 
 var (
@@ -41,9 +42,20 @@ func (c *JSONCleaner) Clean(input string) string {
 	input = strings.Trim(input, "`")
 	input = strings.TrimSpace(input)
 
-	// Extract everything from first { to last }
+	// Remove invalid control characters (except \t, \n, \r which are handled later)
+	var filtered strings.Builder
+	for _, r := range input {
+		if r < 32 && r != '\t' && r != '\n' && r != '\r' {
+			continue
+		}
+		filtered.WriteRune(r)
+	}
+	input = filtered.String()
+	input = strings.TrimSpace(input)
+
+	// Extract the first valid JSON object by finding matching braces
 	// This handles cases where LLM adds explanation text before/after JSON
-	// Skip any leading non-{ characters to find the actual JSON start
+	// or includes multiple JSON objects
 	firstBrace := -1
 	for i, c := range input {
 		if c == '{' {
@@ -51,9 +63,24 @@ func (c *JSONCleaner) Clean(input string) string {
 			break
 		}
 	}
-	lastBrace := strings.LastIndex(input, "}")
-	if firstBrace != -1 && lastBrace != -1 && firstBrace < lastBrace {
-		input = input[firstBrace : lastBrace+1]
+	if firstBrace != -1 {
+		// Find the matching closing brace
+		balance := 0
+		lastBrace := -1
+		for i, c := range input[firstBrace:] {
+			if c == '{' {
+				balance++
+			} else if c == '}' {
+				balance--
+				if balance == 0 {
+					lastBrace = firstBrace + i
+					break
+				}
+			}
+		}
+		if lastBrace != -1 {
+			input = input[firstBrace : lastBrace+1]
+		}
 	}
 
 	// Replace unescaped newlines within strings with \\n
@@ -93,5 +120,5 @@ func (c *JSONCleaner) Clean(input string) string {
 // ParseJSON parses JSON with cleaning for LLM output.
 func (c *JSONCleaner) ParseJSON(input string, v interface{}) error {
 	cleaned := c.Clean(input)
-	return json.Unmarshal([]byte(cleaned), v)
+	return sonic.Unmarshal([]byte(cleaned), v)
 }

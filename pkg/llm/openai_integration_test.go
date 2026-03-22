@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
+	"github.com/xgsong/mypageindexgo/pkg/language"
 )
 
 func TestGenerateStructure_Success(t *testing.T) {
@@ -28,7 +29,11 @@ func TestGenerateStructure_Success(t *testing.T) {
 
 		// Verify request parameters
 		assert.Equal(t, "gpt-4o", req.Model)
-		assert.Len(t, req.Messages, 1)
+		assert.GreaterOrEqual(t, len(req.Messages), 2) // At least system + user messages
+		// Verify system message is present
+		assert.Equal(t, openai.ChatMessageRoleSystem, req.Messages[0].Role)
+		// System message should contain language enforcement
+		assert.NotEmpty(t, req.Messages[0].Content)
 
 		// Return mock response
 		resp := openai.ChatCompletionResponse{
@@ -74,7 +79,7 @@ func TestGenerateStructure_Success(t *testing.T) {
 
 	// Call GenerateStructure
 	ctx := context.Background()
-	node, err := client.GenerateStructure(ctx, "Test document content")
+	node, err := client.GenerateStructure(ctx, "Test document content", language.LanguageEnglish)
 	assert.NoError(t, err)
 	assert.NotNil(t, node)
 
@@ -113,7 +118,7 @@ func TestGenerateStructure_InvalidJSON(t *testing.T) {
 	client := NewOpenAIClient(cfg)
 
 	ctx := context.Background()
-	node, err := client.GenerateStructure(ctx, "Test content")
+	node, err := client.GenerateStructure(ctx, "Test content", language.LanguageEnglish)
 	assert.Error(t, err)
 	assert.Nil(t, node)
 	assert.Contains(t, err.Error(), "failed to parse structure json")
@@ -134,7 +139,7 @@ func TestGenerateStructure_APIError(t *testing.T) {
 	client := NewOpenAIClient(cfg)
 
 	ctx := context.Background()
-	node, err := client.GenerateStructure(ctx, "Test content")
+	node, err := client.GenerateStructure(ctx, "Test content", language.LanguageEnglish)
 	assert.Error(t, err)
 	assert.Nil(t, node)
 	assert.Contains(t, err.Error(), "openai api call failed")
@@ -169,7 +174,7 @@ func TestGenerateSummary_Success(t *testing.T) {
 	client := NewOpenAIClient(cfg)
 
 	ctx := context.Background()
-	summary, err := client.GenerateSummary(ctx, "Test Section", "This is the full content of the test section that needs summarization.")
+	summary, err := client.GenerateSummary(ctx, "Test Section", "This is the full content of the test section that needs summarization.", language.LanguageEnglish)
 	assert.NoError(t, err)
 	assert.Equal(t, "This is a concise summary of the section content.", summary)
 }
@@ -200,7 +205,7 @@ func TestGenerateSummary_EmptyResponse(t *testing.T) {
 	client := NewOpenAIClient(cfg)
 
 	ctx := context.Background()
-	summary, err := client.GenerateSummary(ctx, "Test Section", "Test content")
+	summary, err := client.GenerateSummary(ctx, "Test Section", "Test content", language.LanguageEnglish)
 	assert.NoError(t, err)
 	assert.Empty(t, summary)
 }

@@ -87,9 +87,9 @@ func TestDefaultConfig_Values(t *testing.T) {
 	cfg := DefaultConfig()
 
 	assert.Equal(t, "gpt-4o", cfg.OpenAIModel)
-	assert.Equal(t, 5, cfg.MaxConcurrency)
+	assert.Equal(t, 10, cfg.MaxConcurrency) // Optimized from 5
 	assert.Equal(t, 10, cfg.MaxPagesPerNode)
-	assert.Equal(t, 16000, cfg.MaxTokensPerNode)
+	assert.Equal(t, 24000, cfg.MaxTokensPerNode) // Optimized from 16000
 	assert.False(t, cfg.GenerateSummaries)
 	assert.Equal(t, "info", cfg.LogLevel)
 }

@@ -101,12 +101,15 @@ func TestPageGrouper_GroupPages_MultipleGroups(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Each page ~10 tokens, max 25 tokens per group → should get 2 groups
+	// Using 5 pages to ensure multiple groups (more than overlap*2=4)
 	grouper := NewPageGrouper(tok, 25)
 	doc := &document.Document{
 		Pages: []document.Page{
 			{Number: 1, Text: "one two three four five six seven eight nine ten"},
 			{Number: 2, Text: "eleven twelve thirteen fourteen fifteen sixteen"},
 			{Number: 3, Text: "seventeen eighteen nineteen twenty twentyone twentytwo"},
+			{Number: 4, Text: "twentythree twentyfour twentyfive twentysix twentyseven"},
+			{Number: 5, Text: "twentyeight twentynine thirty thirtyone thirtytwo"},
 		},
 	}
 	groups, err := grouper.GroupPages(doc)

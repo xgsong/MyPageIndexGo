@@ -3,6 +3,8 @@ package document
 import (
 	"io"
 	"strings"
+
+	"github.com/xgsong/mypageindexgo/pkg/language"
 )
 
 // DocumentParser is the adapter interface for different document formats.
@@ -27,6 +29,7 @@ type DocumentParser interface {
 type Document struct {
 	Pages    []Page            `json:"pages"`
 	Metadata map[string]string `json:"metadata,omitempty"`
+	Language language.Language `json:"language"` // Detected document language
 }
 
 // Page represents a single page/section in the processed document.

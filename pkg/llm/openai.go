@@ -2,19 +2,33 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/sashabaranov/go-openai"
 	"github.com/xgsong/mypageindexgo/internal/utils"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
+	"github.com/xgsong/mypageindexgo/pkg/language"
 )
+
+// RateLimitInfo contains rate limit information from OpenAI API responses.
+type RateLimitInfo struct {
+	Remaining int       // Number of remaining requests
+	Reset     time.Time // Time when the rate limit resets
+}
+
+// RateLimitCallback is a function that is called when rate limit information is received.
+type RateLimitCallback func(info RateLimitInfo)
 
 // OpenAIClient implements LLMClient for OpenAI API.
 type OpenAIClient struct {
-	client      *openai.Client
-	model       string
-	jsonCleaner *utils.JSONCleaner
+	client          *openai.Client
+	model           string
+	jsonCleaner     *utils.JSONCleaner
+	OnRateLimitInfo RateLimitCallback // Optional callback for rate limit information
 }
 
 // NewOpenAIClient creates a new OpenAI client from configuration.
@@ -36,17 +50,87 @@ func NewOpenAIClient(cfg *config.Config) *OpenAIClient {
 	}
 }
 
+// createLanguageSystemMessage creates a system message that enforces language consistency.
+// This is critical for ensuring summaries and structure titles match the document language.
+func createLanguageSystemMessage(lang language.Language) string {
+	if lang.Code == "en" && lang.Confidence < 0.5 {
+		// Unknown language, default to English without strong enforcement
+		return "IMPORTANT: Do NOT output any thinking/reasoning process. Directly output only the final result in the required format."
+	}
+
+	// Strong language enforcement for detected languages
+	return fmt.Sprintf(
+		"You MUST respond in %s. The document is written in %s. "+
+			"ALL output including titles, summaries, and structure MUST be in %s. "+
+			"Do NOT use English or any other language. "+
+			"CRITICAL: This is a strict requirement - any output in wrong language will be rejected.",
+		lang.GetLanguageName(),
+		lang.GetLanguageName(),
+		lang.GetLanguageName(),
+	)
+}
+
 // createChatCompletion sends a chat completion request with retry logic.
 func (c *OpenAIClient) createChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (string, error) {
 	var content string
 	err := utils.DoRetry(ctx, utils.DefaultRetryConfig(), func() error {
+		// Prepend system message to force disable thinking/reasoning output
+		// This works for all LLMs regardless of API parameter support
+		systemMsg := openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: "IMPORTANT: Do NOT output any thinking/reasoning process, <think> tags, or chain-of-thought content. Directly output only the final result in the required format. Any thought content must be completely excluded from your response.",
+		}
+		req.Messages = append([]openai.ChatCompletionMessage{systemMsg}, req.Messages...)
+
+		// Disable streaming to ensure we get complete response
+		req.Stream = false
+
 		resp, err := c.client.CreateChatCompletion(ctx, req)
 		if err != nil {
-			return err
+			// Check if this is an API error
+			var apiErr *openai.APIError
+			if errors.As(err, &apiErr) {
+				switch apiErr.HTTPStatusCode {
+				case 429, 500, 502, 503, 504:
+					// These are retryable errors
+					return err // Continue retrying
+				default:
+					// Non-retryable errors, stop retrying
+					return utils.StopRetry(err)
+				}
+			}
+
+			// For other error types, check if they are retryable
+			var reqErr *openai.RequestError
+			if errors.As(err, &reqErr) {
+				// Request errors (connection issues, timeouts) are retryable
+				return err
+			}
+
+			// All other errors are non-retryable
+			return utils.StopRetry(err)
 		}
 		if len(resp.Choices) == 0 {
 			return fmt.Errorf("no choices returned from OpenAI")
 		}
+
+		// Extract rate limit information from successful response
+		if c.OnRateLimitInfo != nil {
+			header := resp.Header()
+			remainingStr := header.Get("X-RateLimit-Remaining")
+			resetStr := header.Get("X-RateLimit-Reset")
+			if remainingStr != "" && resetStr != "" {
+				remaining, _ := strconv.Atoi(remainingStr)
+				resetUnix, _ := strconv.ParseInt(resetStr, 10, 64)
+				if resetUnix > 0 {
+					c.OnRateLimitInfo(RateLimitInfo{
+						Remaining: remaining,
+						Reset:     time.Unix(resetUnix, 0),
+					})
+				}
+			}
+		}
+
 		content = resp.Choices[0].Message.Content
 		return nil
 	})
@@ -57,16 +141,23 @@ func (c *OpenAIClient) createChatCompletion(ctx context.Context, req openai.Chat
 }
 
 // GenerateStructure generates a hierarchical tree structure from raw page text.
-func (c *OpenAIClient) GenerateStructure(ctx context.Context, text string) (*document.Node, error) {
+func (c *OpenAIClient) GenerateStructure(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
 	if text == "" {
 		return nil, fmt.Errorf("empty input text")
 	}
+
+	// Create system message to enforce language consistency
+	systemMsg := createLanguageSystemMessage(lang)
 
 	prompt := GenerateStructurePrompt() + text
 
 	req := openai.ChatCompletionRequest{
 		Model: c.model,
 		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemMsg,
+			},
 			{
 				Role:    openai.ChatMessageRoleUser,
 				Content: prompt,
@@ -82,23 +173,36 @@ func (c *OpenAIClient) GenerateStructure(ctx context.Context, text string) (*doc
 	var node document.Node
 	err = c.jsonCleaner.ParseJSON(content, &node)
 	if err != nil {
+		// Log the raw content for debugging
+		showLen := min(500, len(content))
+		fmt.Printf("DEBUG: Raw LLM response (first %d chars): %q\n", showLen, content[:showLen])
+		fmt.Printf("DEBUG: Total response length: %d\n", len(content))
 		return nil, fmt.Errorf("failed to parse structure json: %w", err)
 	}
 
-	// Ensure node has an ID if not set by LLM
-	if node.ID == "" {
-		// We need to recreate it to get a proper UUID
-		newNode := document.NewNode(node.Title, node.StartPage, node.EndPage)
-		newNode.Summary = node.Summary
-		newNode.Children = node.Children
-		return newNode, nil
-	}
+	// Ensure node has an ID if not set by LLM, and recursively fix all children
+	ensureNodeIDs(&node)
 
 	return &node, nil
 }
 
+// ensureNodeIDs recursively ensures all nodes in the tree have valid IDs
+func ensureNodeIDs(node *document.Node) {
+	if node == nil {
+		return
+	}
+	// Generate ID if empty
+	if node.ID == "" {
+		node.ID = document.NewNode(node.Title, node.StartPage, node.EndPage).ID
+	}
+	// Recursively fix children
+	for _, child := range node.Children {
+		ensureNodeIDs(child)
+	}
+}
+
 // GenerateSummary generates a concise summary for a node that captures its key content.
-func (c *OpenAIClient) GenerateSummary(ctx context.Context, nodeTitle string, text string) (string, error) {
+func (c *OpenAIClient) GenerateSummary(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
 	if text == "" {
 		return "", fmt.Errorf("empty input text")
 	}
@@ -108,9 +212,16 @@ func (c *OpenAIClient) GenerateSummary(ctx context.Context, nodeTitle string, te
 		return "", fmt.Errorf("failed to render summary prompt: %w", err)
 	}
 
+	// Create system message to enforce language consistency
+	systemMsg := createLanguageSystemMessage(lang)
+
 	req := openai.ChatCompletionRequest{
 		Model: c.model,
 		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemMsg,
+			},
 			{
 				Role:    openai.ChatMessageRoleUser,
 				Content: prompt,
@@ -169,7 +280,7 @@ func (c *OpenAIClient) Search(ctx context.Context, query string, tree *document.
 	}
 
 	// Collect the actual node pointers from the tree based on IDs
-	nodes := findNodesByID(tree.Root, sr.NodeIDs)
+	nodes := findNodesByID(tree, sr.NodeIDs)
 
 	result := &document.SearchResult{
 		Query:  query,
@@ -180,28 +291,132 @@ func (c *OpenAIClient) Search(ctx context.Context, query string, tree *document.
 	return result, nil
 }
 
-// findNodesByID recursively searches the tree for nodes with the given IDs.
-func findNodesByID(root *document.Node, ids []string) []*document.Node {
-	idSet := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		idSet[id] = struct{}{}
-	}
-
+// findNodesByID looks up nodes by ID using the index tree's built-in map for O(1) lookups
+func findNodesByID(tree *document.IndexTree, ids []string) []*document.Node {
 	var result []*document.Node
-	var search func(*document.Node)
-	search = func(node *document.Node) {
-		if node == nil {
-			return
-		}
-		if _, ok := idSet[node.ID]; ok {
+	for _, id := range ids {
+		if node := tree.FindNodeByID(id); node != nil {
 			result = append(result, node)
-			delete(idSet, node.ID) // each ID matched once
 		}
-		for _, child := range node.Children {
-			search(child)
+	}
+	return result
+}
+
+// GenerateBatchSummaries generates summaries for multiple nodes in a single batch call.
+func (c *OpenAIClient) GenerateBatchSummaries(ctx context.Context, requests []*BatchSummaryRequest, lang language.Language) ([]*BatchSummaryResponse, error) {
+	if len(requests) == 0 {
+		return []*BatchSummaryResponse{}, nil
+	}
+
+	// Render the batch summary prompt
+	prompt, err := RenderBatchSummaryPrompt(requests)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render batch summary prompt: %w", err)
+	}
+
+	// Create system message to enforce language consistency
+	systemMsg := createLanguageSystemMessage(lang)
+
+	// Create chat completion request
+	req := openai.ChatCompletionRequest{
+		Model: c.model,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemMsg,
+			},
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: prompt,
+			},
+		},
+	}
+
+	// Call OpenAI API
+	content, err := c.createChatCompletion(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate batch summaries: %w", err)
+	}
+
+	// Parse the JSON response
+	var responses []*BatchSummaryResponse
+	err = c.jsonCleaner.ParseJSON(content, &responses)
+	if err != nil {
+		// If batch parsing fails, fall back to individual calls for each request
+		// This ensures we don't fail the entire batch because of one bad response
+		responses = make([]*BatchSummaryResponse, len(requests))
+		for i, req := range requests {
+			summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
+			if err != nil {
+				responses[i] = &BatchSummaryResponse{
+					NodeID: req.NodeID,
+					Error:  err.Error(),
+				}
+			} else {
+				responses[i] = &BatchSummaryResponse{
+					NodeID:  req.NodeID,
+					Summary: summary,
+				}
+			}
+		}
+		return responses, nil
+	}
+
+	// Validate responses match request count
+	if len(responses) != len(requests) {
+		// If response count doesn't match, fall back to individual calls
+		responses = make([]*BatchSummaryResponse, len(requests))
+		for i, req := range requests {
+			summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
+			if err != nil {
+				responses[i] = &BatchSummaryResponse{
+					NodeID: req.NodeID,
+					Error:  err.Error(),
+				}
+			} else {
+				responses[i] = &BatchSummaryResponse{
+					NodeID:  req.NodeID,
+					Summary: summary,
+				}
+			}
+		}
+		return responses, nil
+	}
+
+	// Validate node IDs match
+	requestIDMap := make(map[string]int)
+	for i, req := range requests {
+		requestIDMap[req.NodeID] = i
+	}
+
+	for _, resp := range responses {
+		if _, ok := requestIDMap[resp.NodeID]; !ok {
+			// If any node ID is missing or incorrect, fall back to individual calls
+			responses = make([]*BatchSummaryResponse, len(requests))
+			for i, req := range requests {
+				summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
+				if err != nil {
+					responses[i] = &BatchSummaryResponse{
+						NodeID: req.NodeID,
+						Error:  err.Error(),
+					}
+				} else {
+					responses[i] = &BatchSummaryResponse{
+						NodeID:  req.NodeID,
+						Summary: summary,
+					}
+				}
+			}
+			return responses, nil
 		}
 	}
 
-	search(root)
-	return result
+	// Sort responses to match the original request order
+	sortedResponses := make([]*BatchSummaryResponse, len(requests))
+	for _, resp := range responses {
+		idx := requestIDMap[resp.NodeID]
+		sortedResponses[idx] = resp
+	}
+
+	return sortedResponses, nil
 }
