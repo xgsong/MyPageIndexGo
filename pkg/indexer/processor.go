@@ -186,13 +186,14 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 }
 
 // MergeNodes merges multiple node trees from different page groups into a single coherent tree.
+// Input nodes are cloned to avoid mutating the original trees.
 func MergeNodes(groups []*document.Node) *document.Node {
 	if len(groups) == 0 {
 		return nil
 	}
 
 	if len(groups) == 1 {
-		return groups[0]
+		return document.CloneNode(groups[0])
 	}
 
 	merged := document.NewNode("Document", 1, 0)
@@ -207,10 +208,10 @@ func MergeNodes(groups []*document.Node) *document.Node {
 		}
 		if len(group.Children) > 0 {
 			for _, child := range group.Children {
-				merged.AddChild(child)
+				merged.AddChild(document.CloneNode(child))
 			}
 		} else {
-			merged.AddChild(group)
+			merged.AddChild(document.CloneNode(group))
 		}
 	}
 

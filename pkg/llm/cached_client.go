@@ -19,17 +19,19 @@ type CacheEntry struct {
 
 // CachedLLMClient wraps an LLMClient with caching functionality
 type CachedLLMClient struct {
-	llmClient LLMClient
-	cache     *sync.Map     // key: hash of input, value: CacheEntry
-	ttl       time.Duration // optional TTL for cache entries, 0 means no expiration
+	llmClient         LLMClient
+	cache             *sync.Map
+	ttl               time.Duration
+	enableSearchCache bool
 }
 
 // NewCachedLLMClient creates a new cached LLM client
-func NewCachedLLMClient(client LLMClient, ttl time.Duration) LLMClient {
+func NewCachedLLMClient(client LLMClient, ttl time.Duration, enableSearchCache bool) LLMClient {
 	return &CachedLLMClient{
-		llmClient: client,
-		cache:     &sync.Map{},
-		ttl:       ttl,
+		llmClient:         client,
+		cache:             &sync.Map{},
+		ttl:               ttl,
+		enableSearchCache: enableSearchCache,
 	}
 }
 
@@ -99,11 +101,33 @@ func (c *CachedLLMClient) GenerateSummary(ctx context.Context, nodeTitle string,
 	return summary, nil
 }
 
-// Search performs reasoning-based retrieval on the index tree, using cache if available
+// Search performs reasoning-based retrieval on the index tree, using cache if enabled
 func (c *CachedLLMClient) Search(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error) {
-	// For search, we don't cache by default as it's usually one-off
-	// If caching is desired, a more sophisticated key including tree hash would be needed
-	return c.llmClient.Search(ctx, query, tree)
+	if !c.enableSearchCache {
+		return c.llmClient.Search(ctx, query, tree)
+	}
+
+	// Create cache key from query and tree content
+	key := hashText("Search", query+"||"+tree.Root.Title)
+
+	if entry, ok := c.cache.Load(key); ok {
+		cacheEntry := entry.(CacheEntry)
+		if !c.isExpired(cacheEntry) {
+			return cacheEntry.value.(*document.SearchResult), nil
+		}
+		c.cache.Delete(key)
+	}
+
+	result, err := c.llmClient.Search(ctx, query, tree)
+	if err != nil {
+		return nil, err
+	}
+
+	c.cache.Store(key, CacheEntry{
+		value:     result,
+		timestamp: time.Now(),
+	})
+	return result, nil
 }
 
 // GenerateBatchSummaries generates summaries for multiple nodes in batch, using cache where available

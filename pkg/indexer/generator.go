@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -184,7 +185,7 @@ func (g *IndexGenerator) generateStructures(ctx context.Context, groups []*PageG
 	eg.SetLimit(g.cfg.MaxConcurrency)
 
 	nodes := make([]*document.Node, len(groups))
-	completed := 0
+	var completed atomic.Int32
 
 	for i, group := range groups {
 		i := i
@@ -200,10 +201,10 @@ func (g *IndexGenerator) generateStructures(ctx context.Context, groups []*PageG
 			}
 			nodes[i] = node
 
-			completed++
-			if completed%5 == 0 || completed == len(groups) {
+			newCount := completed.Add(1)
+			if newCount%5 == 0 || int(newCount) == len(groups) {
 				log.Info().
-					Int("completed", completed).
+					Int32("completed", newCount).
 					Int("total", len(groups)).
 					Dur("elapsed", time.Since(startTime)).
 					Msg("Structure generation progress")
@@ -252,7 +253,7 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 	summaryConcurrency := max(1, g.cfg.MaxConcurrency*2)
 	eg.SetLimit(summaryConcurrency)
 
-	completed := 0
+	var completed atomic.Int32
 
 	for _, node := range nodesToProcess {
 		node := node
@@ -275,10 +276,10 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 				}
 			}
 
-			completed++
-			if completed%10 == 0 || completed == len(nodesToProcess) {
+			newCount := completed.Add(1)
+			if newCount%10 == 0 || int(newCount) == len(nodesToProcess) {
 				log.Info().
-					Int("completed", completed).
+					Int32("completed", newCount).
 					Int("total", len(nodesToProcess)).
 					Dur("elapsed", time.Since(startTime)).
 					Msg("Summary generation progress")

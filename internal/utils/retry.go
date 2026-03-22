@@ -30,22 +30,22 @@ func StopRetry(err error) error {
 
 // RetryConfig configures retry behavior.
 type RetryConfig struct {
-	MaxRetries      int
-	BaseDelay       time.Duration
-	MaxDelay        time.Duration
-	Multiplier      float64
-	RetryableErrors []string
+	MaxRetries       int
+	BaseDelay        time.Duration
+	MaxDelay         time.Duration
+	Multiplier       float64
+	RetryableErrors  []string
 	EnableRetryAfter bool // Whether to respect Retry-After header
 }
 
 // DefaultRetryConfig returns a default retry configuration.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
-		MaxRetries:        5,
-		BaseDelay:         time.Second,
-		MaxDelay:          32 * time.Second,
-		Multiplier:        2.0,
-		EnableRetryAfter:  true,
+		MaxRetries:       5,
+		BaseDelay:        time.Second,
+		MaxDelay:         32 * time.Second,
+		Multiplier:       2.0,
+		EnableRetryAfter: true,
 	}
 }
 

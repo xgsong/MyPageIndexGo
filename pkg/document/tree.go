@@ -44,13 +44,13 @@ func (n *Node) CountNodes() int {
 
 // IndexTree represents the complete index tree for a document.
 type IndexTree struct {
-	Root         *Node     `json:"root"`
-	TotalPages   int       `json:"total_pages"`
-	DocumentInfo string    `json:"document_info"`
-	GeneratedAt  time.Time `json:"generated_at"`
-	Version      int       `json:"version,omitempty"`      // Version number for incremental updates
-	LastModified time.Time `json:"last_modified"`          // Last modification time
-	nodeMap      map[string]*Node `json:"-"` // ID to node mapping for fast lookups, not serialized
+	Root         *Node            `json:"root"`
+	TotalPages   int              `json:"total_pages"`
+	DocumentInfo string           `json:"document_info"`
+	GeneratedAt  time.Time        `json:"generated_at"`
+	Version      int              `json:"version,omitempty"` // Version number for incremental updates
+	LastModified time.Time        `json:"last_modified"`     // Last modification time
+	nodeMap      map[string]*Node `json:"-"`                 // ID to node mapping for fast lookups, not serialized
 }
 
 // NewIndexTree creates a new empty IndexTree.
@@ -127,15 +127,19 @@ func (t *IndexTree) FindOverlappingNodes(startPage, endPage int) []*Node {
 // Merge merges another index tree into this one.
 // The new tree's pages are appended after the existing tree's pages.
 // Returns the merged tree (this tree is modified in place).
+// The other tree is cloned before modification to preserve its original state.
 func (t *IndexTree) Merge(other *IndexTree) *IndexTree {
 	if other == nil || other.Root == nil {
 		return t
 	}
 
+	// Clone the other tree to avoid modifying the original
+	otherClone := other.Clone()
+
 	// Calculate page offset for the new tree
 	pageOffset := t.TotalPages
 
-	// Adjust page numbers in the other tree
+	// Adjust page numbers in the cloned tree
 	var adjustPageNumbers func(*Node)
 	adjustPageNumbers = func(node *Node) {
 		if node == nil {
@@ -147,33 +151,52 @@ func (t *IndexTree) Merge(other *IndexTree) *IndexTree {
 			adjustPageNumbers(child)
 		}
 	}
-	adjustPageNumbers(other.Root)
+	adjustPageNumbers(otherClone.Root)
 
 	// Merge the root nodes
 	if t.Root == nil {
-		t.Root = other.Root
+		t.Root = otherClone.Root
 	} else {
 		// Create a combined root node
 		combinedRoot := NewNode(
 			"Combined Document",
 			1,
-			t.TotalPages + other.TotalPages,
+			t.TotalPages+otherClone.TotalPages,
 		)
 		combinedRoot.AddChild(t.Root)
-		combinedRoot.AddChild(other.Root)
+		combinedRoot.AddChild(otherClone.Root)
 		t.Root = combinedRoot
 	}
 
 	// Update total pages and metadata
-	t.TotalPages += other.TotalPages
+	t.TotalPages += otherClone.TotalPages
 	t.Version++
 	t.LastModified = time.Now()
-	t.DocumentInfo = fmt.Sprintf("Combined document: %s + %s", t.DocumentInfo, other.DocumentInfo)
+	t.DocumentInfo = fmt.Sprintf("Combined document: %s + %s", t.DocumentInfo, otherClone.DocumentInfo)
 
 	// Rebuild the node map
 	t.BuildNodeMap()
 
 	return t
+}
+
+// CloneNode creates a deep copy of a node and all its children.
+func CloneNode(node *Node) *Node {
+	if node == nil {
+		return nil
+	}
+	cloned := &Node{
+		ID:        node.ID,
+		Title:     node.Title,
+		StartPage: node.StartPage,
+		EndPage:   node.EndPage,
+		Summary:   node.Summary,
+		Children:  make([]*Node, len(node.Children)),
+	}
+	for i, child := range node.Children {
+		cloned.Children[i] = CloneNode(child)
+	}
+	return cloned
 }
 
 // Clone creates a deep copy of the index tree.
@@ -182,27 +205,7 @@ func (t *IndexTree) Clone() *IndexTree {
 		return nil
 	}
 
-	// Deep clone the root node
-	var cloneNode func(*Node) *Node
-	cloneNode = func(node *Node) *Node {
-		if node == nil {
-			return nil
-		}
-		cloned := &Node{
-			ID:        node.ID,
-			Title:     node.Title,
-			StartPage: node.StartPage,
-			EndPage:   node.EndPage,
-			Summary:   node.Summary,
-			Children:  make([]*Node, len(node.Children)),
-		}
-		for i, child := range node.Children {
-			cloned.Children[i] = cloneNode(child)
-		}
-		return cloned
-	}
-
-	clonedRoot := cloneNode(t.Root)
+	clonedRoot := CloneNode(t.Root)
 	clonedTree := NewIndexTree(clonedRoot, t.TotalPages)
 	clonedTree.DocumentInfo = t.DocumentInfo
 	clonedTree.GeneratedAt = t.GeneratedAt

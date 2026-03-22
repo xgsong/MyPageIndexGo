@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
@@ -21,26 +20,28 @@ type Config struct {
 	GenerateSummaries bool   `mapstructure:"generate_summaries"`
 	LogLevel          string `mapstructure:"log_level"`
 	EnableLLMCache    bool   `mapstructure:"enable_llm_cache"`
-	LLMCacheTTL       int    `mapstructure:"llm_cache_ttl"`      // TTL in seconds, 0 means no expiration
-	EnableBatchCalls  bool   `mapstructure:"enable_batch_calls"` // Enable batch LLM calls for summary generation
-	BatchSize         int    `mapstructure:"batch_size"`         // Number of summaries to generate per batch
+	LLMCacheTTL       int    `mapstructure:"llm_cache_ttl"`       // TTL in seconds, 0 means no expiration
+	EnableSearchCache bool   `mapstructure:"enable_search_cache"` // Enable caching for search results
+	EnableBatchCalls  bool   `mapstructure:"enable_batch_calls"`  // Enable batch LLM calls for summary generation
+	BatchSize         int    `mapstructure:"batch_size"`          // Number of summaries to generate per batch
 }
 
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
 		OpenAIModel:       "gpt-4o",
-		OCRModel:          "GLM-OCR-Q8_0", // Default OCR model for local llama.cpp deployment
-		OCREnabled:        false,          // OCR disabled by default
-		MaxConcurrency:    10,             // Increased from 5 for better parallelism
+		OCRModel:          "GLM-OCR-Q8_0",
+		OCREnabled:        false,
+		MaxConcurrency:    10,
 		MaxPagesPerNode:   10,
-		MaxTokensPerNode:  24000, // Increased from 16000 to reduce group count
+		MaxTokensPerNode:  24000,
 		GenerateSummaries: false,
 		LogLevel:          "info",
-		EnableLLMCache:    true, // Enable cache by default for better performance
-		LLMCacheTTL:       3600, // Default TTL: 1 hour
-		EnableBatchCalls:  true, // Enable batch calls by default for better performance
-		BatchSize:         20,   // Increased from 5 for fewer API calls (conservative to avoid context limit)
+		EnableLLMCache:    true,
+		LLMCacheTTL:       3600,
+		EnableSearchCache: false,
+		EnableBatchCalls:  true,
+		BatchSize:         20,
 	}
 }
 
@@ -66,12 +67,14 @@ func Load() (*Config, error) {
 	v.SetDefault("log_level", cfg.LogLevel)
 	v.SetDefault("enable_llm_cache", cfg.EnableLLMCache)
 	v.SetDefault("llm_cache_ttl", cfg.LLMCacheTTL)
+	v.SetDefault("enable_search_cache", cfg.EnableSearchCache)
 	v.SetDefault("enable_batch_calls", cfg.EnableBatchCalls)
 	v.SetDefault("batch_size", cfg.BatchSize)
 
 	// Read from environment variables with prefix
-	v.AutomaticEnv()
+	// SetEnvPrefix must be called BEFORE AutomaticEnv
 	v.SetEnvPrefix("PAGEINDEX")
+	v.AutomaticEnv()
 
 	// Also bind non-prefixed versions for compatibility with .env
 	_ = v.BindEnv("openai_api_key", "OPENAI_API_KEY")
@@ -86,6 +89,7 @@ func Load() (*Config, error) {
 	_ = v.BindEnv("log_level", "LOG_LEVEL")
 	_ = v.BindEnv("enable_llm_cache", "ENABLE_LLM_CACHE")
 	_ = v.BindEnv("llm_cache_ttl", "LLM_CACHE_TTL")
+	_ = v.BindEnv("enable_search_cache", "ENABLE_SEARCH_CACHE")
 	_ = v.BindEnv("enable_batch_calls", "ENABLE_BATCH_CALLS")
 	_ = v.BindEnv("batch_size", "BATCH_SIZE")
 
@@ -109,22 +113,7 @@ func Load() (*Config, error) {
 
 	// Validate required OpenAI API key
 	if cfg.OpenAIAPIKey == "" {
-		// Try all possible locations
-		cfg.OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
-		if cfg.OpenAIAPIKey == "" {
-			cfg.OpenAIAPIKey = os.Getenv("PAGEINDEX_OPENAI_API_KEY")
-		}
-		if cfg.OpenAIAPIKey == "" {
-			return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required (check .env file)")
-		}
-	}
-
-	// Handle OpenAI base URL if set
-	if cfg.OpenAIBaseURL == "" {
-		cfg.OpenAIBaseURL = os.Getenv("OPENAI_BASE_URL")
-		if cfg.OpenAIBaseURL == "" {
-			cfg.OpenAIBaseURL = os.Getenv("PAGEINDEX_OPENAI_BASE_URL")
-		}
+		return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required (check .env file)")
 	}
 
 	return cfg, nil

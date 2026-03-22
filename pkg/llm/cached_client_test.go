@@ -38,7 +38,7 @@ func (m *MockLLMClient) GenerateBatchSummaries(ctx context.Context, requests []*
 
 func TestCachedLLMClient_GenerateStructure_CacheHit(t *testing.T) {
 	mockClient := new(MockLLMClient)
-	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, false)
 
 	testText := "test content"
 	expectedNode := document.NewNode("Test", 1, 1)
@@ -62,7 +62,7 @@ func TestCachedLLMClient_GenerateStructure_CacheHit(t *testing.T) {
 func TestCachedLLMClient_GenerateStructure_CacheExpired(t *testing.T) {
 	mockClient := new(MockLLMClient)
 	// Use very short TTL
-	cachedClient := NewCachedLLMClient(mockClient, 1*time.Millisecond)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Millisecond, false)
 
 	testText := "test content"
 	expectedNode1 := document.NewNode("Test", 1, 1)
@@ -89,7 +89,7 @@ func TestCachedLLMClient_GenerateStructure_CacheExpired(t *testing.T) {
 
 func TestCachedLLMClient_GenerateSummary_CacheHit(t *testing.T) {
 	mockClient := new(MockLLMClient)
-	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, false)
 
 	testTitle := "Test Title"
 	testText := "test content"
@@ -112,7 +112,7 @@ func TestCachedLLMClient_GenerateSummary_CacheHit(t *testing.T) {
 
 func TestCachedLLMClient_Search_NotCached(t *testing.T) {
 	mockClient := new(MockLLMClient)
-	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, false)
 
 	testQuery := "test query"
 	testTree := document.NewIndexTree(document.NewNode("Root", 1, 10), 10)
@@ -140,7 +140,7 @@ func TestCachedLLMClient_Search_NotCached(t *testing.T) {
 
 func TestCachedLLMClient_DifferentInputs_DifferentCache(t *testing.T) {
 	mockClient := new(MockLLMClient)
-	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, false)
 
 	text1 := "content 1"
 	text2 := "content 2"

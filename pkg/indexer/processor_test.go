@@ -125,7 +125,11 @@ func TestMergeNodes_Empty(t *testing.T) {
 func TestMergeNodes_Single(t *testing.T) {
 	node := document.NewNode("Test", 1, 10)
 	result := MergeNodes([]*document.Node{node})
-	assert.Same(t, node, result)
+	// Result is a clone of the input node, not the same pointer
+	assert.NotNil(t, result)
+	assert.Equal(t, node.Title, result.Title)
+	assert.Equal(t, node.StartPage, result.StartPage)
+	assert.Equal(t, node.EndPage, result.EndPage)
 }
 
 func TestMergeNodes_Multiple(t *testing.T) {

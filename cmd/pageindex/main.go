@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 
@@ -124,6 +123,9 @@ func main() {
 }
 
 func generateAction(c *cli.Context) error {
+	// Setup logging with default level first
+	setupLogging("info")
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -138,9 +140,8 @@ func generateAction(c *cli.Context) error {
 		cfg.MaxConcurrency = c.Int("max-concurrency")
 	}
 
-	// Setup logging
-	logger := logging.Setup(cfg.LogLevel)
-	log.Logger = logger
+	// Reconfigure logging with actual level from config
+	setupLogging(cfg.LogLevel)
 
 	// Validate input
 	pdfPath := c.String("pdf")
@@ -193,8 +194,8 @@ func generateAction(c *cli.Context) error {
 	// Wrap with cache if enabled
 	if cfg.EnableLLMCache {
 		ttl := time.Duration(cfg.LLMCacheTTL) * time.Second
-		llmClient = llm.NewCachedLLMClient(llmClient, ttl)
-		log.Info().Dur("ttl", ttl).Msg("LLM cache enabled")
+		llmClient = llm.NewCachedLLMClient(llmClient, ttl, cfg.EnableSearchCache)
+		log.Info().Dur("ttl", ttl).Bool("search_cache", cfg.EnableSearchCache).Msg("LLM cache enabled")
 	}
 
 	// Create index generator
@@ -207,7 +208,9 @@ func generateAction(c *cli.Context) error {
 	log.Info().Msg("Generating index...")
 	startTime := time.Now()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
 	tree, err := generator.Generate(ctx, doc)
 	if err != nil {
 		return fmt.Errorf("failed to generate index: %w", err)
@@ -232,15 +235,17 @@ func generateAction(c *cli.Context) error {
 }
 
 func searchAction(c *cli.Context) error {
+	// Setup logging with default level first
+	setupLogging("info")
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Setup logging
-	logger := logging.Setup(cfg.LogLevel)
-	log.Logger = logger
+	// Reconfigure logging with actual level from config
+	setupLogging(cfg.LogLevel)
 
 	// Get arguments
 	indexPath := c.String("index")
@@ -263,8 +268,8 @@ func searchAction(c *cli.Context) error {
 	// Wrap with cache if enabled
 	if cfg.EnableLLMCache {
 		ttl := time.Duration(cfg.LLMCacheTTL) * time.Second
-		llmClient = llm.NewCachedLLMClient(llmClient, ttl)
-		log.Info().Dur("ttl", ttl).Msg("LLM cache enabled")
+		llmClient = llm.NewCachedLLMClient(llmClient, ttl, cfg.EnableSearchCache)
+		log.Info().Dur("ttl", ttl).Bool("search_cache", cfg.EnableSearchCache).Msg("LLM cache enabled")
 	}
 
 	// Create searcher
@@ -274,7 +279,9 @@ func searchAction(c *cli.Context) error {
 	log.Info().Msg("Searching...")
 	startTime := time.Now()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
 	result, err := searcher.Search(ctx, query, tree)
 	if err != nil {
 		return fmt.Errorf("search failed: %w", err)
@@ -316,6 +323,9 @@ func formatPageRange(start, end int) string {
 
 // updateAction handles the update command for incremental index updates
 func updateAction(c *cli.Context) error {
+	// Setup logging with default level first
+	setupLogging("info")
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -330,9 +340,8 @@ func updateAction(c *cli.Context) error {
 		cfg.MaxConcurrency = c.Int("max-concurrency")
 	}
 
-	// Setup logging
-	logger := logging.Setup(cfg.LogLevel)
-	log.Logger = logger
+	// Reconfigure logging with actual level from config
+	setupLogging(cfg.LogLevel)
 
 	// Validate input
 	existingIndexPath := c.String("existing")
@@ -396,8 +405,8 @@ func updateAction(c *cli.Context) error {
 	// Wrap with cache if enabled
 	if cfg.EnableLLMCache {
 		ttl := time.Duration(cfg.LLMCacheTTL) * time.Second
-		llmClient = llm.NewCachedLLMClient(llmClient, ttl)
-		log.Info().Dur("ttl", ttl).Msg("LLM cache enabled")
+		llmClient = llm.NewCachedLLMClient(llmClient, ttl, cfg.EnableSearchCache)
+		log.Info().Dur("ttl", ttl).Bool("search_cache", cfg.EnableSearchCache).Msg("LLM cache enabled")
 	}
 
 	// Create index generator
@@ -410,7 +419,9 @@ func updateAction(c *cli.Context) error {
 	log.Info().Msg("Generating merged index...")
 	startTime := time.Now()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
 	mergedTree, err := generator.Update(ctx, existingTree, newDoc)
 	if err != nil {
 		return fmt.Errorf("failed to update index: %w", err)
@@ -436,12 +447,8 @@ func updateAction(c *cli.Context) error {
 	return nil
 }
 
-// init sets up zerolog for console output
-func init() {
-	// Use console writer for nicer output
-	log.Logger = zerolog.New(
-		zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339, NoColor: false},
-	).With().Timestamp().Logger()
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	zerolog.TimeFieldFormat = time.RFC3339
+// setupLogging sets up logging with the specified level
+func setupLogging(level string) {
+	logger := logging.Setup(level)
+	log.Logger = logger
 }
