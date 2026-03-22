@@ -42,3 +42,7 @@ dist/
 pageindex-e2e-*.json
 test-results/
 .remember/
+
+# Compiled binary (only at root level)
+/pageindex
+*.exe
