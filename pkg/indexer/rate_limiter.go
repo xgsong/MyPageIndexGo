@@ -20,18 +20,9 @@ type DynamicRateLimiter struct {
 
 // NewDynamicRateLimiter creates a new DynamicRateLimiter with the given initial, min, and max concurrency limits.
 func NewDynamicRateLimiter(initialConcurrency, minConcurrency, maxConcurrency int) *DynamicRateLimiter {
-	if minConcurrency < 1 {
-		minConcurrency = 1
-	}
-	if maxConcurrency < minConcurrency {
-		maxConcurrency = minConcurrency
-	}
-	if initialConcurrency < minConcurrency {
-		initialConcurrency = minConcurrency
-	}
-	if initialConcurrency > maxConcurrency {
-		initialConcurrency = maxConcurrency
-	}
+	minConcurrency = max(1, minConcurrency)
+	maxConcurrency = max(minConcurrency, maxConcurrency)
+	initialConcurrency = min(max(initialConcurrency, minConcurrency), maxConcurrency)
 
 	return &DynamicRateLimiter{
 		limiter:        rate.NewLimiter(rate.Limit(initialConcurrency), initialConcurrency),
@@ -64,10 +55,7 @@ func (d *DynamicRateLimiter) AdjustRate(remaining int, reset time.Time) {
 	var newLimit int
 	if remaining < d.currentLimit/2 {
 		// Reduce by 50% but not below min
-		newLimit = d.currentLimit / 2
-		if newLimit < d.minConcurrency {
-			newLimit = d.minConcurrency
-		}
+		newLimit = max(d.currentLimit/2, d.minConcurrency)
 	} else if remaining > d.currentLimit*2 {
 		// Increase by 50% but not above max
 		newLimit = d.currentLimit * 3 / 2
@@ -75,9 +63,7 @@ func (d *DynamicRateLimiter) AdjustRate(remaining int, reset time.Time) {
 		if newLimit == d.currentLimit {
 			newLimit++
 		}
-		if newLimit > d.maxConcurrency {
-			newLimit = d.maxConcurrency
-		}
+		newLimit = min(newLimit, d.maxConcurrency)
 	} else {
 		// Keep current limit
 		return

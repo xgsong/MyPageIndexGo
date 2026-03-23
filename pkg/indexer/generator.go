@@ -43,10 +43,7 @@ func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGener
 	}
 
 	// Get max tokens per group from config
-	maxTokens := cfg.MaxTokensPerNode
-	if maxTokens <= 0 {
-		maxTokens = 24000
-	}
+	maxTokens := min(max(1, cfg.MaxTokensPerNode), 24000)
 
 	pageGrouper := NewPageGrouper(tok, maxTokens)
 

@@ -2,6 +2,7 @@ package document
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,10 +71,7 @@ func (t *IndexTree) BuildNodeMap() {
 	if t.nodeMap == nil {
 		t.nodeMap = make(map[string]*Node)
 	} else {
-		// Clear existing map
-		for k := range t.nodeMap {
-			delete(t.nodeMap, k)
-		}
+		clear(t.nodeMap)
 	}
 
 	var traverse func(*Node)
@@ -191,7 +189,7 @@ func CloneNode(node *Node) *Node {
 		StartPage: node.StartPage,
 		EndPage:   node.EndPage,
 		Summary:   node.Summary,
-		Children:  make([]*Node, len(node.Children)),
+		Children:  slices.Clone(node.Children),
 	}
 	for i, child := range node.Children {
 		cloned.Children[i] = CloneNode(child)

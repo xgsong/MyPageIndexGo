@@ -200,12 +200,8 @@ func MergeNodes(groups []*document.Node) *document.Node {
 	endPage := 0
 
 	for _, group := range groups {
-		if group.StartPage < merged.StartPage {
-			merged.StartPage = group.StartPage
-		}
-		if group.EndPage > endPage {
-			endPage = group.EndPage
-		}
+		merged.StartPage = min(group.StartPage, merged.StartPage)
+		endPage = max(group.EndPage, endPage)
 		if len(group.Children) > 0 {
 			for _, child := range group.Children {
 				merged.AddChild(document.CloneNode(child))

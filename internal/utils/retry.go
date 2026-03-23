@@ -93,8 +93,5 @@ func DoRetry(ctx context.Context, config *RetryConfig, fn RetryableFunc) error {
 
 func calculateDelay(config *RetryConfig, attempt int) time.Duration {
 	delay := float64(config.BaseDelay) * math.Pow(config.Multiplier, float64(attempt))
-	if delay > float64(config.MaxDelay) {
-		delay = float64(config.MaxDelay)
-	}
-	return time.Duration(delay)
+	return time.Duration(min(delay, float64(config.MaxDelay)))
 }
