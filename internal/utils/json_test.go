@@ -80,10 +80,10 @@ func TestJSONCleaner_RemovesTrailingComma(t *testing.T) {
 	input := `{"items": [1, 2, 3,], "key": "value"}`
 	cleaned := cleaner.Clean(input)
 
-	var result map[string]interface{}
+	var result map[string]any
 	err := cleaner.ParseJSON(cleaned, &result)
 	require.NoError(t, err)
-	assert.Equal(t, []interface{}{float64(1), float64(2), float64(3)}, result["items"])
+	assert.Equal(t, []any{float64(1), float64(2), float64(3)}, result["items"])
 }
 
 func TestJSONCleaner_EscapedBackslash(t *testing.T) {

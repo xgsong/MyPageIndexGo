@@ -40,7 +40,7 @@ func LoadIndexTree(path string) (*document.IndexTree, error) {
 }
 
 // saveJSON marshals data to JSON and writes it to a file.
-func saveJSON(data interface{}, path string) error {
+func saveJSON(data any, path string) error {
 	// Create parent directory if it doesn't exist
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {

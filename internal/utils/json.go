@@ -118,7 +118,7 @@ func (c *JSONCleaner) Clean(input string) string {
 }
 
 // ParseJSON parses JSON with cleaning for LLM output.
-func (c *JSONCleaner) ParseJSON(input string, v interface{}) error {
+func (c *JSONCleaner) ParseJSON(input string, v any) error {
 	cleaned := c.Clean(input)
 	return sonic.Unmarshal([]byte(cleaned), v)
 }

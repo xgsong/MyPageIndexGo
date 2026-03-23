@@ -13,7 +13,7 @@ import (
 
 // CacheEntry represents an entry in the LLM cache
 type CacheEntry struct {
-	value     interface{}
+	value     any
 	timestamp time.Time
 }
 

@@ -37,7 +37,7 @@ func NewOpenAIOCRClient(cfg *config.Config) *OpenAIOCRClient {
 	return &OpenAIOCRClient{
 		client: openai.NewClientWithConfig(clientConfig),
 		model:  model,
-		systemPrompt: `You are an OCR (Optical Character Recognition) engine. 
+		systemPrompt: `You are an OCR (Optical Character Recognition) engine.
 Your task is to extract all text content from the provided image accurately.
 Preserve the original layout and formatting as much as possible.
 Do not add any explanations, summaries, or additional text.
