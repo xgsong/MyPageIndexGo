@@ -2,83 +2,74 @@ package indexer
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
-// DynamicRateLimiter implements a dynamic rate limiter that adjusts based on API feedback.
-// It uses a token bucket algorithm to control the rate of requests.
+const (
+	defaultInitialConcurrency = 10
+	defaultMinConcurrency     = 5
+	defaultMaxConcurrency     = 40
+)
+
 type DynamicRateLimiter struct {
-	mu             sync.Mutex
 	limiter        *rate.Limiter
-	minConcurrency int
-	maxConcurrency int
-	currentLimit   int
+	minConcurrency atomic.Int32
+	maxConcurrency atomic.Int32
+	currentLimit   atomic.Int32
 }
 
-// NewDynamicRateLimiter creates a new DynamicRateLimiter with the given initial, min, and max concurrency limits.
 func NewDynamicRateLimiter(initialConcurrency, minConcurrency, maxConcurrency int) *DynamicRateLimiter {
-	minConcurrency = max(1, minConcurrency)
-	maxConcurrency = max(minConcurrency, maxConcurrency)
-	initialConcurrency = min(max(initialConcurrency, minConcurrency), maxConcurrency)
+	minC := int32(max(1, minConcurrency))
+	maxC := int32(max(int(minC), maxConcurrency))
+	initialC := int32(min(max(initialConcurrency, int(minC)), int(maxC)))
 
-	return &DynamicRateLimiter{
-		limiter:        rate.NewLimiter(rate.Limit(initialConcurrency), initialConcurrency),
-		minConcurrency: minConcurrency,
-		maxConcurrency: maxConcurrency,
-		currentLimit:   initialConcurrency,
+	d := &DynamicRateLimiter{
+		limiter: rate.NewLimiter(rate.Limit(initialC), int(initialC)),
 	}
+	d.minConcurrency.Store(minC)
+	d.maxConcurrency.Store(maxC)
+	d.currentLimit.Store(initialC)
+
+	return d
 }
 
-// Wait blocks until a token is available or the context is canceled.
 func (d *DynamicRateLimiter) Wait(ctx context.Context) error {
 	return d.limiter.Wait(ctx)
 }
 
-// AdjustRate adjusts the rate limit based on remaining quota and reset time.
-// remaining: number of remaining requests in the current window
-// reset: time when the rate limit window resets
 func (d *DynamicRateLimiter) AdjustRate(remaining int, reset time.Time) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	// Calculate time until reset
 	timeUntilReset := time.Until(reset)
 	if timeUntilReset <= 0 {
-		// Already reset, no need to adjust
 		return
 	}
 
-	// If remaining is low, reduce concurrency
+	current := int(d.currentLimit.Load())
+	minC := int(d.minConcurrency.Load())
+	maxC := int(d.maxConcurrency.Load())
+
 	var newLimit int
-	if remaining < d.currentLimit/2 {
-		// Reduce by 50% but not below min
-		newLimit = max(d.currentLimit/2, d.minConcurrency)
-	} else if remaining > d.currentLimit*2 {
-		// Increase by 50% but not above max
-		newLimit = d.currentLimit * 3 / 2
-		// Handle case where integer truncation doesn't increase the limit
-		if newLimit == d.currentLimit {
+	if remaining < current/2 {
+		newLimit = max(current/2, minC)
+	} else if remaining > current*2 {
+		newLimit = current * 3 / 2
+		if newLimit == current {
 			newLimit++
 		}
-		newLimit = min(newLimit, d.maxConcurrency)
+		newLimit = min(newLimit, maxC)
 	} else {
-		// Keep current limit
 		return
 	}
 
-	if newLimit != d.currentLimit {
-		d.currentLimit = newLimit
+	if newLimit != current {
+		d.currentLimit.Store(int32(newLimit))
 		d.limiter.SetLimit(rate.Limit(newLimit))
 		d.limiter.SetBurst(newLimit)
 	}
 }
 
-// CurrentLimit returns the current concurrency limit.
 func (d *DynamicRateLimiter) CurrentLimit() int {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.currentLimit
+	return int(d.currentLimit.Load())
 }
