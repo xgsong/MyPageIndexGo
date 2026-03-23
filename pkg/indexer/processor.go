@@ -122,7 +122,8 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 		}
 	}
 
-	var groups []*PageGroup
+	estimatedGroups := len(pagesWithTokens)/5 + 1
+	groups := make([]*PageGroup, 0, estimatedGroups)
 	var currentGroup *PageGroup
 	var currentText strings.Builder
 	var currentTokens int
