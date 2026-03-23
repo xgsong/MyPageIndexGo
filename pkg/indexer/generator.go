@@ -47,7 +47,6 @@ func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGener
 
 	pageGrouper := NewPageGrouper(tok, maxTokens)
 
-	// Initialize dynamic rate limiter
 	initialConcurrency := max(1, cfg.MaxConcurrency)
 	minConcurrency := max(1, initialConcurrency/2)
 	maxConcurrency := max(initialConcurrency, initialConcurrency*4)
@@ -61,7 +60,6 @@ func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGener
 		rateLimiter: rateLimiter,
 	}
 
-	// Set rate limit callback if this is an OpenAI client
 	if openaiClient, ok := llmClient.(*llm.OpenAIClient); ok {
 		openaiClient.OnRateLimitInfo = func(info llm.RateLimitInfo) {
 			rateLimiter.AdjustRate(info.Remaining, info.Reset)
@@ -69,6 +67,28 @@ func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGener
 	}
 
 	return gen, nil
+}
+
+func calculateOptimalBatchSize(nodeCount int, totalTokens int) (batchSize int, tokensPerBatch int) {
+	const (
+		minBatchSize      = 5
+		maxBatchSize      = 50
+		minTokensPerBatch = 10000
+		maxTokensLimit    = 100000
+		targetBatches     = 10
+	)
+
+	if nodeCount <= minBatchSize {
+		return nodeCount, maxTokensLimit
+	}
+
+	batchSize = max(minBatchSize, min(nodeCount/targetBatches, maxBatchSize))
+
+	avgTokensPerNode := totalTokens / nodeCount
+	calculatedTokens := avgTokensPerNode * batchSize
+	tokensPerBatch = max(minTokensPerBatch, min(calculatedTokens, maxTokensLimit))
+
+	return batchSize, tokensPerBatch
 }
 
 // Generate generates a complete index tree from a parsed document.
