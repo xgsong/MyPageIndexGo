@@ -8,6 +8,22 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/tokenizer"
 )
 
+const (
+	MinContentLength = 10
+	MinTokenCount    = 3
+)
+
+func filterMeaningfulPages(pages []document.Page) []document.Page {
+	result := make([]document.Page, 0, len(pages))
+	for _, page := range pages {
+		contentLength := len(strings.TrimSpace(page.Text))
+		if contentLength >= MinContentLength {
+			result = append(result, page)
+		}
+	}
+	return result
+}
+
 // PageGroup represents a group of pages combined into a single chunk for LLM processing.
 type PageGroup struct {
 	Text       string `json:"text"`
@@ -55,13 +71,24 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 		return nil, fmt.Errorf("document has no pages")
 	}
 
-	// OPTIMIZATION: Pre-compute token counts ONCE per page
-	pagesWithTokens := make([]pageWithTokens, len(doc.Pages))
-	for i, page := range doc.Pages {
-		pagesWithTokens[i] = pageWithTokens{
-			page:   page,
-			tokens: g.tokenizer.Count(page.Text),
+	filteredPages := filterMeaningfulPages(doc.Pages)
+	if len(filteredPages) == 0 {
+		return nil, fmt.Errorf("document has no meaningful content pages")
+	}
+
+	pagesWithTokens := make([]pageWithTokens, 0, len(filteredPages))
+	for _, page := range filteredPages {
+		tokens := g.tokenizer.Count(page.Text)
+		if tokens >= MinTokenCount {
+			pagesWithTokens = append(pagesWithTokens, pageWithTokens{
+				page:   page,
+				tokens: tokens,
+			})
 		}
+	}
+
+	if len(pagesWithTokens) == 0 {
+		return nil, fmt.Errorf("document has no pages with sufficient content")
 	}
 
 	// Small document optimization - but first check if any page exceeds maxTokens

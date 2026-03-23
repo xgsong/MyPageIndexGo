@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"container/list"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,31 +12,136 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/language"
 )
 
-// CacheEntry represents an entry in the LLM cache
-type CacheEntry struct {
+const DefaultMaxCacheEntries = 10000
+
+type lruEntry struct {
 	value     any
 	timestamp time.Time
+	key       string
+	element   *list.Element
 }
 
-// CachedLLMClient wraps an LLMClient with caching functionality
+type LRUCache struct {
+	mu      sync.RWMutex
+	entries map[string]*lruEntry
+	lruList *list.List
+	maxSize int
+	ttl     time.Duration
+}
+
+func NewLRUCache(maxSize int, ttl time.Duration) *LRUCache {
+	if maxSize <= 0 {
+		maxSize = DefaultMaxCacheEntries
+	}
+	return &LRUCache{
+		entries: make(map[string]*lruEntry),
+		lruList: list.New(),
+		maxSize: maxSize,
+		ttl:     ttl,
+	}
+}
+
+func (c *LRUCache) Get(key string) (any, bool) {
+	c.mu.RLock()
+	entry, exists := c.entries[key]
+	c.mu.RUnlock()
+
+	if !exists {
+		return nil, false
+	}
+
+	if c.ttl > 0 && time.Since(entry.timestamp) > c.ttl {
+		c.mu.Lock()
+		if entry, ok := c.entries[key]; ok {
+			if c.ttl > 0 && time.Since(entry.timestamp) > c.ttl {
+				c.removeEntry(entry)
+				c.mu.Unlock()
+				return nil, false
+			}
+		}
+		c.mu.Unlock()
+	}
+
+	c.mu.Lock()
+	if entry.element != nil {
+		c.lruList.MoveToFront(entry.element)
+	}
+	c.mu.Unlock()
+
+	return entry.value, true
+}
+
+func (c *LRUCache) Set(key string, value any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if entry, exists := c.entries[key]; exists {
+		entry.value = value
+		entry.timestamp = time.Now()
+		c.lruList.MoveToFront(entry.element)
+		return
+	}
+
+	for len(c.entries) >= c.maxSize {
+		c.evictOldest()
+	}
+
+	entry := &lruEntry{
+		value:     value,
+		timestamp: time.Now(),
+		key:       key,
+	}
+	entry.element = c.lruList.PushFront(entry)
+	c.entries[key] = entry
+}
+
+func (c *LRUCache) Delete(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if entry, exists := c.entries[key]; exists {
+		c.removeEntry(entry)
+	}
+}
+
+func (c *LRUCache) evictOldest() {
+	elem := c.lruList.Back()
+	if elem == nil {
+		return
+	}
+	entry := elem.Value.(*lruEntry)
+	c.removeEntry(entry)
+}
+
+func (c *LRUCache) removeEntry(entry *lruEntry) {
+	delete(c.entries, entry.key)
+	if entry.element != nil {
+		c.lruList.Remove(entry.element)
+	}
+}
+
+func (c *LRUCache) Len() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.entries)
+}
+
 type CachedLLMClient struct {
 	llmClient         LLMClient
-	cache             *sync.Map
+	cache             *LRUCache
 	ttl               time.Duration
 	enableSearchCache bool
 }
 
-// NewCachedLLMClient creates a new cached LLM client
 func NewCachedLLMClient(client LLMClient, ttl time.Duration, enableSearchCache bool) LLMClient {
 	return &CachedLLMClient{
 		llmClient:         client,
-		cache:             &sync.Map{},
+		cache:             NewLRUCache(DefaultMaxCacheEntries, ttl),
 		ttl:               ttl,
 		enableSearchCache: enableSearchCache,
 	}
 }
 
-// hashText generates a hash key for the given prefix and text
 func hashText(prefix, text string) string {
 	h := sha256.New()
 	h.Write([]byte(prefix))
@@ -43,25 +149,11 @@ func hashText(prefix, text string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// isExpired checks if a cache entry is expired
-func (c *CachedLLMClient) isExpired(entry CacheEntry) bool {
-	if c.ttl <= 0 {
-		return false
-	}
-	return time.Since(entry.timestamp) > c.ttl
-}
-
-// GenerateStructure generates a hierarchical tree structure from raw page text, using cache if available
 func (c *CachedLLMClient) GenerateStructure(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
 	key := hashText("GenerateStructure", text+lang.Code)
 
-	if entry, ok := c.cache.Load(key); ok {
-		cacheEntry := entry.(CacheEntry)
-		if !c.isExpired(cacheEntry) {
-			return cacheEntry.value.(*document.Node), nil
-		}
-		// Remove expired entry
-		c.cache.Delete(key)
+	if value, ok := c.cache.Get(key); ok {
+		return value.(*document.Node), nil
 	}
 
 	node, err := c.llmClient.GenerateStructure(ctx, text, lang)
@@ -69,24 +161,15 @@ func (c *CachedLLMClient) GenerateStructure(ctx context.Context, text string, la
 		return nil, err
 	}
 
-	c.cache.Store(key, CacheEntry{
-		value:     node,
-		timestamp: time.Now(),
-	})
+	c.cache.Set(key, node)
 	return node, nil
 }
 
-// GenerateSummary generates a concise summary for a node, using cache if available
 func (c *CachedLLMClient) GenerateSummary(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
 	key := hashText("GenerateSummary", nodeTitle+"||"+text+"||"+lang.Code)
 
-	if entry, ok := c.cache.Load(key); ok {
-		cacheEntry := entry.(CacheEntry)
-		if !c.isExpired(cacheEntry) {
-			return cacheEntry.value.(string), nil
-		}
-		// Remove expired entry
-		c.cache.Delete(key)
+	if value, ok := c.cache.Get(key); ok {
+		return value.(string), nil
 	}
 
 	summary, err := c.llmClient.GenerateSummary(ctx, nodeTitle, text, lang)
@@ -94,28 +177,19 @@ func (c *CachedLLMClient) GenerateSummary(ctx context.Context, nodeTitle string,
 		return "", err
 	}
 
-	c.cache.Store(key, CacheEntry{
-		value:     summary,
-		timestamp: time.Now(),
-	})
+	c.cache.Set(key, summary)
 	return summary, nil
 }
 
-// Search performs reasoning-based retrieval on the index tree, using cache if enabled
 func (c *CachedLLMClient) Search(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error) {
 	if !c.enableSearchCache {
 		return c.llmClient.Search(ctx, query, tree)
 	}
 
-	// Create cache key from query and tree content
 	key := hashText("Search", query+"||"+tree.Root.Title)
 
-	if entry, ok := c.cache.Load(key); ok {
-		cacheEntry := entry.(CacheEntry)
-		if !c.isExpired(cacheEntry) {
-			return cacheEntry.value.(*document.SearchResult), nil
-		}
-		c.cache.Delete(key)
+	if value, ok := c.cache.Get(key); ok {
+		return value.(*document.SearchResult), nil
 	}
 
 	result, err := c.llmClient.Search(ctx, query, tree)
@@ -123,56 +197,39 @@ func (c *CachedLLMClient) Search(ctx context.Context, query string, tree *docume
 		return nil, err
 	}
 
-	c.cache.Store(key, CacheEntry{
-		value:     result,
-		timestamp: time.Now(),
-	})
+	c.cache.Set(key, result)
 	return result, nil
 }
 
-// GenerateBatchSummaries generates summaries for multiple nodes in batch, using cache where available
 func (c *CachedLLMClient) GenerateBatchSummaries(ctx context.Context, requests []*BatchSummaryRequest, lang language.Language) ([]*BatchSummaryResponse, error) {
-	// Split requests into cached and uncached
 	var cachedResponses []*BatchSummaryResponse
 	var uncachedRequests []*BatchSummaryRequest
-	var requestIndices []int // track original indices of uncached requests
+	var requestIndices []int
 
 	for i, req := range requests {
 		key := hashText("GenerateSummary", req.NodeTitle+"||"+req.Text+"||"+lang.Code)
-		if entry, ok := c.cache.Load(key); ok {
-			cacheEntry := entry.(CacheEntry)
-			if !c.isExpired(cacheEntry) {
-				// Return cached result
-				cachedResponses = append(cachedResponses, &BatchSummaryResponse{
-					NodeID:  req.NodeID,
-					Summary: cacheEntry.value.(string),
-				})
-				continue
-			}
-			// Remove expired entry
-			c.cache.Delete(key)
+		if value, ok := c.cache.Get(key); ok {
+			cachedResponses = append(cachedResponses, &BatchSummaryResponse{
+				NodeID:  req.NodeID,
+				Summary: value.(string),
+			})
+			continue
 		}
-		// Need to fetch this one
 		uncachedRequests = append(uncachedRequests, req)
 		requestIndices = append(requestIndices, i)
 	}
 
-	// If all are cached, return immediately
 	if len(uncachedRequests) == 0 {
 		return cachedResponses, nil
 	}
 
-	// Fetch uncached requests in batch
 	uncachedResponses, err := c.llmClient.GenerateBatchSummaries(ctx, uncachedRequests, lang)
 	if err != nil {
 		return nil, err
 	}
 
-	// Cache the new responses and merge with cached ones
 	responses := make([]*BatchSummaryResponse, len(requests))
-	// Fill cached responses first
 	for _, resp := range cachedResponses {
-		// Find the original index
 		for i, req := range requests {
 			if req.NodeID == resp.NodeID {
 				responses[i] = resp
@@ -180,18 +237,13 @@ func (c *CachedLLMClient) GenerateBatchSummaries(ctx context.Context, requests [
 			}
 		}
 	}
-	// Fill uncached responses
 	for i, resp := range uncachedResponses {
 		originalIdx := requestIndices[i]
 		responses[originalIdx] = resp
-		// Cache the result if no error
 		if resp.Error == "" {
 			req := uncachedRequests[i]
 			key := hashText("GenerateSummary", req.NodeTitle+"||"+req.Text+"||"+lang.Code)
-			c.cache.Store(key, CacheEntry{
-				value:     resp.Summary,
-				timestamp: time.Now(),
-			})
+			c.cache.Set(key, resp.Summary)
 		}
 	}
 
