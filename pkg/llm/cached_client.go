@@ -249,3 +249,20 @@ func (c *CachedLLMClient) GenerateBatchSummaries(ctx context.Context, requests [
 
 	return responses, nil
 }
+
+// GenerateSimple generates a simple text response with caching
+func (c *CachedLLMClient) GenerateSimple(ctx context.Context, prompt string) (string, error) {
+	key := hashText("GenerateSimple", prompt)
+
+	if value, ok := c.cache.Get(key); ok {
+		return value.(string), nil
+	}
+
+	response, err := c.llmClient.GenerateSimple(ctx, prompt)
+	if err != nil {
+		return "", err
+	}
+
+	c.cache.Set(key, response)
+	return response, nil
+}

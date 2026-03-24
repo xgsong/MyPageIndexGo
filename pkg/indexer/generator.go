@@ -462,3 +462,98 @@ func (g *IndexGenerator) GenerateSummariesForNode(ctx context.Context, node *doc
 	node.Summary = summary
 	return nil
 }
+
+// GenerateWithTOC generates an index tree using TOC-based processing.
+// This is the main entry point for PDF indexing with TOC detection and processing.
+// Python equivalent: meta_processor + post_processing in page_index.py
+func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Document) (*document.IndexTree, error) {
+	startTime := time.Now()
+	log.Info().
+		Int("pages", len(doc.Pages)).
+		Str("language", doc.Language.Name).
+		Msg("Starting index generation with TOC")
+
+	// Detect document language from first page sample
+	if doc.Language.Code == "" {
+		doc.Language = language.Detect(doc.GetFullText())
+		log.Info().Str("detected_language", doc.Language.Name).Msg("Detected document language")
+	}
+
+	// Create meta processor
+	mp := NewMetaProcessor(g.llmClient, g.cfg)
+
+	// Convert document pages to page texts
+	pageTexts := make([]string, len(doc.Pages))
+	for i, page := range doc.Pages {
+		pageTexts[i] = page.Text
+	}
+
+	// Check if document has TOC
+	tocDetector := NewTOCDetector(g.llmClient)
+	tocResult, err := tocDetector.CheckTOC(ctx, pageTexts, g.cfg.TOCheckPageNum)
+	if err != nil {
+		log.Warn().Err(err).Msg("TOC detection failed, proceeding without TOC")
+		tocResult = &TOCResult{
+			TOCContent:     "",
+			TOCPageList:    []int{},
+			PageIndexGiven: false,
+			Items:          []TOCItem{},
+		}
+	}
+
+	// Determine processing mode
+	var mode ProcessingMode
+	if len(tocResult.TOCPageList) > 0 {
+		if tocResult.PageIndexGiven {
+			mode = ModeTOCWithPageNumbers
+			log.Info().Msg("Processing mode: TOC with page numbers")
+		} else {
+			mode = ModeTOCNoPageNumbers
+			log.Info().Msg("Processing mode: TOC without page numbers")
+		}
+	} else {
+		mode = ModeNoTOC
+		log.Info().Msg("Processing mode: No TOC detected")
+	}
+
+	// Process document with meta processor
+	items, err := mp.Process(ctx, pageTexts, mode, tocResult.TOCContent, tocResult.TOCPageList, 1)
+	if err != nil {
+		return nil, fmt.Errorf("meta processor failed: %w", err)
+	}
+
+	log.Info().Int("toc_items", len(items)).Msg("Meta processor complete")
+
+	// Convert TOC items to tree structure using Python-equivalent logic
+	root := g.generateTreeFromTOC(items, len(doc.Pages))
+	if root == nil {
+		return nil, fmt.Errorf("failed to generate tree from TOC")
+	}
+
+	// Count total nodes
+	totalNodes := root.CountNodes()
+	log.Info().Int("total_nodes", totalNodes).Msg("Tree structure created")
+
+	// Create the index tree
+	tree := document.NewIndexTree(root, len(doc.Pages))
+	tree.DocumentInfo = fmt.Sprintf("Document with %d pages", len(doc.Pages))
+
+	// Generate summaries if enabled
+	if g.cfg.GenerateSummaries {
+		stepStart := time.Now()
+		log.Info().Int("nodes", totalNodes).Msg("Starting summary generation")
+		if err := g.generateAllSummaries(ctx, root); err != nil {
+			return nil, fmt.Errorf("failed to generate summaries: %w", err)
+		}
+		log.Info().
+			Dur("duration", time.Since(stepStart)).
+			Msg("Summary generation complete")
+	}
+
+	log.Info().
+		Dur("total_duration", time.Since(startTime)).
+		Int("total_nodes", totalNodes).
+		Msg("Index generation complete")
+
+	return tree, nil
+}

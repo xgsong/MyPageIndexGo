@@ -420,3 +420,23 @@ func (c *OpenAIClient) GenerateBatchSummaries(ctx context.Context, requests []*B
 
 	return sortedResponses, nil
 }
+
+// GenerateSimple generates a simple text response from a prompt.
+func (c *OpenAIClient) GenerateSimple(ctx context.Context, prompt string) (string, error) {
+	req := openai.ChatCompletionRequest{
+		Model: c.model,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: prompt,
+			},
+		},
+	}
+
+	content, err := c.createChatCompletion(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate simple response: %w", err)
+	}
+
+	return content, nil
+}

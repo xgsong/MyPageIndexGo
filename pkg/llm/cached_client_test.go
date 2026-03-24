@@ -36,6 +36,11 @@ func (m *MockLLMClient) GenerateBatchSummaries(ctx context.Context, requests []*
 	return args.Get(0).([]*BatchSummaryResponse), args.Error(1)
 }
 
+func (m *MockLLMClient) GenerateSimple(ctx context.Context, prompt string) (string, error) {
+	args := m.Called(ctx, prompt)
+	return args.String(0), args.Error(1)
+}
+
 func TestCachedLLMClient_GenerateStructure_CacheHit(t *testing.T) {
 	mockClient := new(MockLLMClient)
 	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, false)

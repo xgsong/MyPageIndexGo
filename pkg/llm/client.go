@@ -37,8 +37,11 @@ type LLMClient interface {
 	// Returns a search result with answer and relevant nodes.
 	Search(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error)
 
+	// GenerateSimple generates a simple text response from LLM without structured output.
+	// Used for simple prompts like TOC detection where we just need a string response.
+	GenerateSimple(ctx context.Context, prompt string) (string, error)
+
 	// GenerateBatchSummaries generates summaries for multiple nodes in a single batch call.
-	// Returns a slice of responses matching the order of requests.
-	// The lang parameter ensures all summaries are written in the document's language.
+	// Used for efficient bulk summary generation.
 	GenerateBatchSummaries(ctx context.Context, requests []*BatchSummaryRequest, lang language.Language) ([]*BatchSummaryResponse, error)
 }

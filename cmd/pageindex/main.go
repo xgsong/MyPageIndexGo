@@ -211,7 +211,8 @@ func generateAction(c *cli.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	tree, err := generator.Generate(ctx, doc)
+	// Use GenerateWithTOC for better TOC-based indexing with deduplication
+	tree, err := generator.GenerateWithTOC(ctx, doc)
 	if err != nil {
 		return fmt.Errorf("failed to generate index: %w", err)
 	}
