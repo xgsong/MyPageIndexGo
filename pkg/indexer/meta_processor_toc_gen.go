@@ -9,10 +9,42 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/language"
 )
 
+// getLanguageInstructionForTOC returns language-specific instruction for TOC generation
+func getLanguageInstructionForTOC(lang language.Language) string {
+	if lang.Code == "zh" {
+		return `IMPORTANT: The document is written in Chinese. ALL section titles MUST be in Chinese (中文). Do NOT use English or any other language.`
+	}
+	if lang.Code == "ja" {
+		return `IMPORTANT: The document is written in Japanese. ALL section titles MUST be in Japanese (日本語). Do NOT use English or any other language.`
+	}
+	if lang.Code == "ko" {
+		return `IMPORTANT: The document is written in Korean. ALL section titles MUST be in Korean (한국어). Do NOT use English or any other language.`
+	}
+	if lang.Code == "ru" {
+		return `IMPORTANT: The document is written in Russian. ALL section titles MUST be in Russian. Do NOT use English or any other language.`
+	}
+	if lang.Code == "fr" {
+		return `IMPORTANT: The document is written in French. ALL section titles MUST be in French. Do NOT use English or any other language.`
+	}
+	if lang.Code == "de" {
+		return `IMPORTANT: The document is written in German. ALL section titles MUST be in German. Do NOT use English or any other language.`
+	}
+	if lang.Code == "es" {
+		return `IMPORTANT: The document is written in Spanish. ALL section titles MUST be in Spanish. Do NOT use English or any other language.`
+	}
+	// Default for English or unknown languages
+	return ``
+}
+
 // generateTOCInit generates initial TOC from first content group
 // Python: generate_toc_init in page_index.py:540-567
-func (mp *MetaProcessor) generateTOCInit(ctx context.Context, content string, startIndex int) ([]TOCItem, error) {
-	prompt := fmt.Sprintf(`Extract a hierarchical tree structure from the given document content.
+func (mp *MetaProcessor) generateTOCInit(ctx context.Context, content string, startIndex int, lang language.Language) ([]TOCItem, error) {
+	// Create language-specific system message
+	languageInstruction := getLanguageInstructionForTOC(lang)
+
+	prompt := fmt.Sprintf(`%s
+
+Extract a hierarchical tree structure from the given document content.
 
 IMPORTANT REQUIREMENTS:
 1. Use consistent structure numbering: "1", "1.1", "1.2", "2", "2.1", etc. (no leading zeros, no trailing dots)
@@ -38,7 +70,7 @@ Return the result in the following JSON format:
 }
 
 Document content:
-%s`, content)
+%s`, languageInstruction, content)
 
 	response, err := mp.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
@@ -70,10 +102,15 @@ Document content:
 
 // generateTOCContinue continues TOC generation for additional content
 // Python: generate_toc_continue in page_index.py (implied)
-func (mp *MetaProcessor) generateTOCContinue(ctx context.Context, existingTOC []TOCItem, content string, startIndex int) ([]TOCItem, error) {
+func (mp *MetaProcessor) generateTOCContinue(ctx context.Context, existingTOC []TOCItem, content string, startIndex int, lang language.Language) ([]TOCItem, error) {
 	existingJSON, _ := json.Marshal(existingTOC)
 
-	prompt := fmt.Sprintf(`Continue extracting hierarchical tree structure from additional document content.
+	// Create language-specific system message
+	languageInstruction := getLanguageInstructionForTOC(lang)
+
+	prompt := fmt.Sprintf(`%s
+
+Continue extracting hierarchical tree structure from additional document content.
 
 Existing TOC:
 %s
@@ -109,7 +146,7 @@ Return in the following JSON format:
     ]
 }
 
-Return ONLY new sections. If all sections are already in Existing TOC, return an empty array [].`, string(existingJSON), content)
+Return ONLY new sections. If all sections are already in Existing TOC, return an empty array [].`, languageInstruction, string(existingJSON), content)
 
 	response, err := mp.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {

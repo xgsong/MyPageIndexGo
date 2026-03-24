@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/config"
+	"github.com/xgsong/mypageindexgo/pkg/language"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 )
 
@@ -28,15 +29,17 @@ type MetaProcessor struct {
 	cfg         *config.Config
 	tocDetector *TOCDetector
 	tocVerifier *TOCVerifier
+	docLanguage language.Language // Document language for consistent output
 }
 
 // NewMetaProcessor creates a new MetaProcessor
-func NewMetaProcessor(client llm.LLMClient, cfg *config.Config) *MetaProcessor {
+func NewMetaProcessor(client llm.LLMClient, cfg *config.Config, docLanguage language.Language) *MetaProcessor {
 	return &MetaProcessor{
 		llmClient:   client,
 		cfg:         cfg,
 		tocDetector: NewTOCDetector(client),
 		tocVerifier: NewTOCVerifier(client),
+		docLanguage: docLanguage,
 	}
 }
 
@@ -51,10 +54,23 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 	switch mode {
 	case ModeTOCWithPageNumbers:
 		result, err = mp.processTOCWithPageNumbers(ctx, pageTexts, tocContent, tocPageList, startIndex)
+		if err != nil {
+			log.Warn().Err(err).Msg("TOC with page numbers processing failed, falling back to TOC no page numbers mode")
+			return mp.Process(ctx, pageTexts, ModeTOCNoPageNumbers, tocContent, tocPageList, startIndex)
+		}
 	case ModeTOCNoPageNumbers:
 		result, err = mp.processTOCNoPageNumbers(ctx, pageTexts, tocContent, tocPageList, startIndex)
+		if err != nil {
+			log.Warn().Err(err).Msg("TOC without page numbers processing failed, falling back to no TOC mode")
+			return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
+		}
 	case ModeNoTOC:
 		result, err = mp.processNoTOC(ctx, pageTexts, startIndex)
+		if err != nil {
+			log.Warn().Err(err).Msg("No TOC processing failed, returning simple flat structure")
+			// Fallback to simplest possible structure: one item per page
+			return mp.generateSimpleFlatStructure(pageTexts, startIndex), nil
+		}
 	default:
 		return nil, fmt.Errorf("unknown processing mode: %s", mode)
 	}
@@ -190,6 +206,32 @@ func (mp *MetaProcessor) processTOCNoPageNumbers(ctx context.Context, pageTexts 
 	return tocItems, nil
 }
 
+// generateSimpleFlatStructure generates the simplest possible structure: one item per page
+func (mp *MetaProcessor) generateSimpleFlatStructure(pageTexts []string, startIndex int) []TOCItem {
+	var items []TOCItem
+	for i := range pageTexts {
+		pageNum := startIndex + i // pageNum is 1-based, matching Page.Number in document
+		physicalIdx := pageNum    // Create copy to avoid pointer reuse
+
+		// Generate title based on document language
+		var title string
+		if mp.docLanguage.Code == "zh" {
+			title = fmt.Sprintf("第%d页", pageNum)
+		} else {
+			title = fmt.Sprintf("Page %d", pageNum)
+		}
+
+		items = append(items, TOCItem{
+			Structure:     fmt.Sprintf("%d", i+1),
+			Title:         title,
+			PhysicalIndex: &physicalIdx, // Use 1-based index matching Page.Number
+			AppearStart:   "yes",        // Each section starts at the beginning of the page
+		})
+	}
+	log.Info().Int("items", len(items)).Msg("Generated simple flat structure as fallback")
+	return items
+}
+
 // processNoTOC generates structure without TOC
 // Python: process_no_toc in page_index.py:576-595
 func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, startIndex int) ([]TOCItem, error) {
@@ -206,14 +248,14 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 	}
 
 	// Step 3: Generate initial TOC from first group
-	tocItems, err := mp.generateTOCInit(ctx, groupTexts[0], startIndex)
+	tocItems, err := mp.generateTOCInit(ctx, groupTexts[0], startIndex, mp.docLanguage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate initial TOC: %w", err)
 	}
 
 	// Step 4: Continue TOC generation for remaining groups
 	for i, groupText := range groupTexts[1:] {
-		additional, err := mp.generateTOCContinue(ctx, tocItems, groupText, startIndex)
+		additional, err := mp.generateTOCContinue(ctx, tocItems, groupText, startIndex, mp.docLanguage)
 		if err != nil {
 			log.Warn().Err(err).Int("group", i+1).Msg("Failed to continue TOC generation")
 			continue

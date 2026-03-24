@@ -30,19 +30,20 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 		log.Info().Str("detected_language", doc.Language.Name).Msg("Detected document language")
 	}
 
-	// Precompute page text map for summary generation
-	g.pageTextMap = make(map[int]string, len(doc.Pages))
-	for _, p := range doc.Pages {
-		g.pageTextMap[p.Number] = p.Text
-	}
-
 	// Create meta processor
-	mp := NewMetaProcessor(g.llmClient, g.cfg)
+	mp := NewMetaProcessor(g.llmClient, g.cfg, doc.Language)
 
 	// Convert document pages to page texts
 	pageTexts := make([]string, len(doc.Pages))
 	for i, page := range doc.Pages {
 		pageTexts[i] = page.Text
+	}
+
+	// Precompute page text map for summary generation (1-based)
+	g.pageTextMap = make(map[int]string, len(doc.Pages))
+	for i, text := range pageTexts {
+		pageNum := i + 1 // Pages are 1-based
+		g.pageTextMap[pageNum] = text
 	}
 
 	// Check if document has TOC
