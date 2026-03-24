@@ -29,6 +29,8 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 			continue
 		}
 
+		startPage := *items[i].PhysicalIndex
+
 		if i < len(items)-1 && items[i+1].PhysicalIndex != nil {
 			// Check if next item appears at start (appear_start == "yes")
 			if items[i+1].AppearStart == "yes" {
@@ -39,6 +41,11 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		} else {
 			// Last item
 			items[i].EndPage = totalPages
+		}
+
+		// Clamp: end_page must be at least start_page
+		if items[i].EndPage < startPage {
+			items[i].EndPage = startPage
 		}
 	}
 
@@ -79,16 +86,37 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 	}
 
 	// Clean empty children arrays (Python: clean_node in utils.py:356-362)
-	cleanNode := func(n *document.Node) {
+	var cleanNode func(n *document.Node)
+	cleanNode = func(n *document.Node) {
 		if len(n.Children) == 0 {
 			n.Children = nil
+		} else {
+			for _, child := range n.Children {
+				cleanNode(child)
+			}
 		}
 	}
 	for _, node := range rootNodes {
 		cleanNode(node)
 	}
 
-	// If single root node, return it directly (Python doesn't wrap in extra root)
+	// Python: post_processing fallback (utils.py:440-447)
+	// If list_to_tree returns empty, return flat structure
+	if len(rootNodes) == 0 {
+		// Fallback: create flat nodes from items
+		root := document.NewNode("Document", 1, totalPages)
+		for _, item := range items {
+			startPage := 1
+			if item.PhysicalIndex != nil {
+				startPage = *item.PhysicalIndex
+			}
+			node := document.NewNode(item.Title, startPage, item.EndPage)
+			root.AddChild(node)
+		}
+		return root
+	}
+
+	// If single root node, return it directly
 	if len(rootNodes) == 1 {
 		return rootNodes[0]
 	}

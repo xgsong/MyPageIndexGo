@@ -22,9 +22,10 @@ type Config struct {
 	EnableLLMCache    bool   `mapstructure:"enable_llm_cache"`
 	LLMCacheTTL       int    `mapstructure:"llm_cache_ttl"`       // TTL in seconds, 0 means no expiration
 	EnableSearchCache bool   `mapstructure:"enable_search_cache"` // Enable caching for search results
-	EnableBatchCalls  bool   `mapstructure:"enable_batch_calls"`  // Enable batch LLM calls for summary generation
-	BatchSize         int    `mapstructure:"batch_size`           // Number of summaries per batch call
-	TOCheckPageNum    int    `mapstructure:"toc_check_page_num"`  // Max pages to scan for TOC detection (default: 20 like Python)          // Number of summaries to generate per batch
+	EnableBatchCalls    bool   `mapstructure:"enable_batch_calls"`    // Enable batch LLM calls for summary generation
+	BatchSize           int    `mapstructure:"batch_size"`            // Number of summaries per batch call
+	TOCheckPageNum      int    `mapstructure:"toc_check_page_num"`    // Max pages to scan for TOC detection (default: 20 like Python)
+	MaxTokenNumEachNode int    `mapstructure:"max_token_num_each_node"` // Max tokens per node for large node recursion (default: 20000)
 }
 
 // DefaultConfig returns the default configuration.
@@ -41,9 +42,10 @@ func DefaultConfig() *Config {
 		EnableLLMCache:    true,
 		LLMCacheTTL:       3600,
 		EnableSearchCache: false,
-		EnableBatchCalls:  true,
-		BatchSize:         20,
-		TOCheckPageNum:    20,
+		EnableBatchCalls:    true,
+		BatchSize:           20,
+		TOCheckPageNum:      20,
+		MaxTokenNumEachNode: 20000,
 	}
 }
 
@@ -73,6 +75,7 @@ func Load() (*Config, error) {
 	v.SetDefault("enable_batch_calls", cfg.EnableBatchCalls)
 	v.SetDefault("batch_size", cfg.BatchSize)
 	v.SetDefault("toc_check_page_num", cfg.TOCheckPageNum)
+	v.SetDefault("max_token_num_each_node", cfg.MaxTokenNumEachNode)
 
 	// Read from environment variables with prefix
 	// SetEnvPrefix must be called BEFORE AutomaticEnv
@@ -96,6 +99,7 @@ func Load() (*Config, error) {
 	_ = v.BindEnv("enable_batch_calls", "ENABLE_BATCH_CALLS")
 	_ = v.BindEnv("batch_size", "BATCH_SIZE")
 	_ = v.BindEnv("toc_check_page_num", "TOC_CHECK_PAGE_NUM")
+	_ = v.BindEnv("max_token_num_each_node", "MAX_TOKEN_NUM_EACH_NODE")
 
 	// Try to read from config file if exists
 	v.SetConfigName("config")
