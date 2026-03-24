@@ -36,31 +36,34 @@ Please note: abstract, summary, notation list, figure list, table list, etc. are
 
 // tocTransformerPrompt creates prompt for TOC transformation
 func tocTransformerPrompt(tocContent string) string {
-	return fmt.Sprintf(`You are given a table of contents. Your job is to transform the whole table of content into a JSON format included table_of_contents.
-
-structure is the numeric system which represents the index of the hierarchy section in the table of contents. For example, the first section has structure index 1, the first subsection has structure index 1.1, the second subsection has structure index 1.2, etc.
-
-The response should be in the following JSON format:
+	return fmt.Sprintf(`你现在需要将给定的目录内容转换为标准的JSON格式。
+请严格按照以下要求返回结果：
+1. 只返回JSON格式内容，不要任何其他解释、说明、或者额外文本
+2. JSON结构必须严格符合下面的格式要求：
 {
     "table_of_contents": [
         {
-            "structure": "structure index, x.x.x or None (string)",
-            "title": "title of the section",
-            "page": page number or None (number)
+            "structure": "目录层级编号，字符串类型，比如"1", "1.1", "2.3.1"，没有则填"None"",
+            "title": "章节标题，字符串类型",
+            "page": 页码，数字类型，没有则填null
         }
     ]
 }
+3. 确保JSON格式正确，没有语法错误
 
-You should transform the full table of contents in one go.
-Directly return the final JSON structure, do not output anything else.
-
-Given table of contents:
+现在要转换的目录内容是：
 %s`, tocContent)
 }
 
 // parseLLMJSONResponse parses JSON from LLM response
 func parseLLMJSONResponse(response string, target interface{}) error {
 	content := response
+	originalResponse := response
+
+	// Remove all leading non-JSON characters (BOM, control characters, etc.)
+	content = strings.TrimFunc(content, func(r rune) bool {
+		return r < ' ' || r == '\ufeff' || r == 'ï' || r == '»' || r == '¿' || r == 'p' || r == 'n' || r == 't'
+	})
 
 	// Remove markdown code blocks
 	start := strings.Index(content, "```json")
@@ -79,14 +82,74 @@ func parseLLMJSONResponse(response string, target interface{}) error {
 		content = strings.TrimSpace(content)
 	}
 
-	// Replace Python None with JSON null
+	// Remove any leading text before JSON starts
+	// Handle cases like "json\n{...}" or "Here is the JSON:\n{...}"
+	jsonStart := strings.Index(content, "{")
+	if jsonStart == -1 {
+		jsonStart = strings.Index(content, "[")
+	}
+	if jsonStart > 0 {
+		content = content[jsonStart:]
+	}
+
+	// Again remove any leading non-JSON characters
+	content = strings.TrimLeftFunc(content, func(r rune) bool {
+		return r != '{' && r != '['
+	})
+
+	// Find the first '{' and last '}' to extract JSON content
+	// This handles cases where JSON is surrounded by other text
+	firstBrace := strings.Index(content, "{")
+	lastBrace := strings.LastIndex(content, "}")
+	if firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace {
+		content = content[firstBrace : lastBrace+1]
+	} else {
+		// If no braces found, try to find JSON array
+		firstBracket := strings.Index(content, "[")
+		lastBracket := strings.LastIndex(content, "]")
+		if firstBracket != -1 && lastBracket != -1 && lastBracket > firstBracket {
+			content = content[firstBracket : lastBracket+1]
+		}
+	}
+
+	// Replace common invalid patterns
 	content = strings.ReplaceAll(content, "None", "null")
+	content = strings.ReplaceAll(content, "none", "null")
+	content = strings.ReplaceAll(content, "'", "\"") // Replace single quotes with double quotes
+	content = strings.ReplaceAll(content, "“", "\"") // Replace smart quotes
+	content = strings.ReplaceAll(content, "”", "\"")
+	content = strings.ReplaceAll(content, "‘", "'")
+	content = strings.ReplaceAll(content, "’", "'")
+	content = strings.ReplaceAll(content, "，", ",") // Replace Chinese commas
+	content = strings.ReplaceAll(content, "：", ":") // Replace Chinese colons
 
 	// Try parsing
 	if err := json.Unmarshal([]byte(content), target); err != nil {
 		// Try cleaning trailing commas
 		cleaned := regexp.MustCompile(`,\s*([}\]])`).ReplaceAllString(content, "$1")
 		if err2 := json.Unmarshal([]byte(cleaned), target); err2 != nil {
+			// Try to fix unquoted keys
+			cleaned = regexp.MustCompile(`([{\s,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:`).ReplaceAllString(cleaned, `$1"$2":`)
+			if err3 := json.Unmarshal([]byte(cleaned), target); err3 == nil {
+				return nil
+			}
+			// Last resort: try to extract JSON using regex
+			jsonRegex := regexp.MustCompile(`(?s)\{.*\}`)
+			matches := jsonRegex.FindString(originalResponse)
+			if matches != "" {
+				if err3 := json.Unmarshal([]byte(matches), target); err3 == nil {
+					return nil
+				}
+			}
+			// Try array regex
+			arrayRegex := regexp.MustCompile(`(?s)\[.*\]`)
+			matches = arrayRegex.FindString(originalResponse)
+			if matches != "" {
+				if err3 := json.Unmarshal([]byte(matches), target); err3 == nil {
+					return nil
+				}
+			}
+			log.Error().Str("raw_response", originalResponse).Msg("JSON parsing failed")
 			return fmt.Errorf("failed to parse JSON: %w", err)
 		}
 	}

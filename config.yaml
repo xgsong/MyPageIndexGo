@@ -1,0 +1,83 @@
+# PageIndex Configuration File
+# Copy this file to config.yaml and adjust values as needed
+# All non-sensitive configuration must be set in this file
+# Sensitive credentials (API keys) must be set in .env file or environment variables
+
+# -----------------------------------------------------------------------------
+# LLM Configuration
+# -----------------------------------------------------------------------------
+# OpenAI-compatible API base URL
+openai_base_url: 'http://localhost:8081/v1'
+
+# Model name to use for generation
+openai_model: 'Qwen3.5-9B.Q4_K_M'
+
+# -----------------------------------------------------------------------------
+# OCR Configuration (for scanned PDF documents)
+# -----------------------------------------------------------------------------
+# Enable OCR support for scanned PDFs
+ocr_enabled: true
+
+# OCR provider type: currently only "llama_cpp" is supported
+ocr_type: 'llama_cpp'
+
+# OCR model name (e.g., GLM-OCR-Q8_0, llava-ocr)
+ocr_model: 'GLM-OCR-Q8_0'
+
+# Llama.cpp OCR server URL (required when ocr_type is "llama_cpp")
+llama_cpp_ocr_server_url: 'http://localhost:8080/v1'
+
+# DPI for PDF page rendering to images
+# Higher values produce better OCR accuracy but are slower
+ocr_render_dpi: 150
+
+# Maximum concurrent OCR requests
+ocr_concurrency: 5
+
+# OCR request timeout in seconds
+ocr_timeout: 60
+
+# -----------------------------------------------------------------------------
+# Indexer Configuration
+# -----------------------------------------------------------------------------
+# Maximum concurrent LLM API calls
+max_concurrency: 10
+
+# Maximum number of pages per index node
+max_pages_per_node: 10
+
+# Maximum tokens per index node
+max_tokens_per_node: 24000
+
+# Generate summaries for each index node
+generate_summaries: false
+
+# Enable batch LLM calls for summary generation
+enable_batch_calls: true
+
+# Number of summaries per batch call
+batch_size: 20
+
+# Maximum pages to scan for TOC detection
+toc_check_page_num: 20
+
+# Maximum tokens per node for large node recursion
+max_token_num_each_node: 20000
+
+# -----------------------------------------------------------------------------
+# Cache Configuration
+# -----------------------------------------------------------------------------
+# Enable LLM response caching to reduce API calls
+enable_llm_cache: true
+
+# LLM cache TTL in seconds (0 means no expiration)
+llm_cache_ttl: 3600
+
+# Enable caching for search results
+enable_search_cache: false
+
+# -----------------------------------------------------------------------------
+# Logging Configuration
+# -----------------------------------------------------------------------------
+# Log level: debug, info, warn, error
+log_level: 'info'

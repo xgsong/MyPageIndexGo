@@ -105,10 +105,11 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 		log.Info().Str("detected_language", doc.Language.Name).Msg("Detected document language")
 	}
 
-	// Precompute page text map for summary generation
+	// Precompute page text map for summary generation (1-based)
 	g.pageTextMap = make(map[int]string, len(doc.Pages))
-	for _, p := range doc.Pages {
-		g.pageTextMap[p.Number] = p.Text
+	for i, p := range doc.Pages {
+		pageNum := i + 1 // Pages are 1-based
+		g.pageTextMap[pageNum] = p.Text
 	}
 
 	// Step 1: Group pages

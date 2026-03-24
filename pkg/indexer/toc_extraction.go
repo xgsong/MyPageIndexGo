@@ -25,11 +25,11 @@ func (d *TOCDetector) extractTOCContent(pages []string, tocPageIndices []int) st
 // extractTOCContentWithLLM uses LLM to extract and clean TOC content
 // Python: extract_toc_content in page_index.py:160-200
 func (d *TOCDetector) extractTOCContentWithLLM(ctx context.Context, rawContent string) (string, error) {
-	prompt := fmt.Sprintf(`Your job is to extract the full table of contents from the given text, replace ... with :
+	prompt := fmt.Sprintf(`请从给定的文本中提取完整的目录内容，将目录中的省略号（...）替换为冒号（:）。
+只返回提取和整理后的目录内容，不要任何其他解释或额外文本。
 
-Given text: %s
-
-Directly return the full table of contents content. Do not output anything else.`, rawContent)
+给定的文本：
+%s`, rawContent)
 
 	response, err := d.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
@@ -66,20 +66,17 @@ Previous output:
 // checkTOCTransformationComplete checks if TOC transformation is complete
 // Python: check_if_toc_transformation_is_complete in page_index.py:143-158
 func (d *TOCDetector) checkTOCTransformationComplete(ctx context.Context, rawContent, transformedContent string) bool {
-	prompt := fmt.Sprintf(`You are given a raw table of contents and a table of contents.
-Your job is to check if the table of contents is complete.
-
-Reply format:
+	prompt := fmt.Sprintf(`请检查整理后的目录是否完整，包含了原始目录的所有内容。
+请严格按照JSON格式返回结果，不要任何其他内容：
 {
-    "thinking": "why do you think the cleaned table of contents is complete or not",
-    "completed": "yes or no"
+    "thinking": "解释你认为目录是否完整的原因",
+    "completed": "yes或者no"
 }
-Directly return the final JSON structure. Do not output anything else.
 
-Raw Table of contents:
+原始目录内容：
 %s
 
-Cleaned Table of contents:
+整理后的目录内容：
 %s`, rawContent, transformedContent)
 
 	response, err := d.llmClient.GenerateSimple(ctx, prompt)
@@ -99,18 +96,15 @@ Cleaned Table of contents:
 
 // detectPageIndex asks LLM if TOC has page numbers
 func (d *TOCDetector) detectPageIndex(ctx context.Context, tocContent string) (bool, error) {
-	prompt := fmt.Sprintf(`You will be given a table of contents.
-
-Your job is to detect if there are page numbers/indices given within the table of contents.
-
-Given text: %s
-
-Reply format:
+	prompt := fmt.Sprintf(`请检查给定的目录中是否包含页码信息。
+请严格按照JSON格式返回结果，不要任何其他内容：
 {
-    "thinking": "why do you think there are page numbers/indices given within the table of contents",
-    "page_index_given_in_toc": "yes or no"
+    "thinking": "解释你认为目录中是否包含页码的原因",
+    "page_index_given_in_toc": "yes或者no"
 }
-Directly return the final JSON structure. Do not output anything else.`, tocContent)
+
+给定的目录内容：
+%s`, tocContent)
 
 	response, err := d.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {

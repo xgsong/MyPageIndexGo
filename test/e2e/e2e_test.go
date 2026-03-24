@@ -41,12 +41,10 @@ func TestE2E_GenerateAndSearch(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, cfg.OpenAIAPIKey)
 
-	// Use a cheaper model for testing
+	// Use a cheaper model for testing if not explicitly set in config.yaml
+	// Note: Model configuration must be set in config.yaml, not via environment variables
 	if cfg.OpenAIModel == "gpt-4o" {
-		// Override to cheaper model for test if not explicitly set
-		if os.Getenv("OPENAI_MODEL") == "" {
-			cfg.OpenAIModel = "gpt-4o-mini"
-		}
+		cfg.OpenAIModel = "gpt-4o-mini"
 	}
 
 	// Step 2: Open and parse input document
@@ -123,7 +121,7 @@ func TestE2E_GenerateAndSearch(t *testing.T) {
 	} else {
 		// Without summaries, LLM can only point to where to find the information
 		// This is expected behavior
-		t.Log("Note: GENERATE_SUMMARIES is false, answer won't contain specific numbers (expected)")
+		t.Log("Note: generate_summaries is false in config.yaml, answer won't contain specific numbers (expected)")
 	}
 
 	t.Log("✓ E2E test completed successfully!")
@@ -154,12 +152,10 @@ func TestE2E_GenerateAndSearch_PDF(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, cfg.OpenAIAPIKey)
 
-	// Use a cheaper model for testing
+	// Use a cheaper model for testing if not explicitly set in config.yaml
+	// Note: Model configuration must be set in config.yaml, not via environment variables
 	if cfg.OpenAIModel == "gpt-4o" {
-		// Override to cheaper model for test if not explicitly set
-		if os.Getenv("OPENAI_MODEL") == "" {
-			cfg.OpenAIModel = "gpt-4o-mini"
-		}
+		cfg.OpenAIModel = "gpt-4o-mini"
 	}
 
 	// Step 2: Open and parse input PDF

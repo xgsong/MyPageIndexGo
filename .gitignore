@@ -46,4 +46,6 @@ test-results/
 # Compiled binary (only at root level)
 /pageindex
 *.exe
+
 nul
+test-scan.pdf

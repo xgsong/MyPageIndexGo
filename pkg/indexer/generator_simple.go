@@ -40,7 +40,7 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 			}
 		} else {
 			// Last item
-			items[i].EndPage = totalPages
+			items[i].EndPage = totalPages // Page numbers are 1-based
 		}
 
 		// Clamp: end_page must be at least start_page

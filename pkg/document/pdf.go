@@ -172,12 +172,47 @@ func (p *PDFParser) extractWithOCR(ctx context.Context, buf []byte) ([]Page, err
 		return nil, fmt.Errorf("OCR client not configured")
 	}
 
-	// For now, return an error indicating this feature requires additional implementation
-	// The actual implementation would need to:
-	// 1. Render PDF pages to images (using a PDF rendering library)
-	// 2. Call OCR API for each page
-	// 3. Return extracted text
-	return nil, fmt.Errorf("OCR feature requires PDF rendering support. Please ensure the PDF contains text layer or use a tool to convert scanned PDFs to text-based PDFs first")
+	// Create PDF renderer with default DPI 150
+	// TODO: Make DPI configurable via PDFParser options
+	renderer := NewPDFRenderer(150)
+
+	// Render all pages to images
+	// TODO: Make concurrency configurable via PDFParser options
+	images, err := renderer.RenderAllPagesFromBytes(ctx, buf, 5)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render PDF pages: %w", err)
+	}
+
+	// Prepare OCR requests
+	reqs := make([]*OCRRequest, len(images))
+	for i, imgData := range images {
+		reqs[i] = &OCRRequest{
+			ImageData: imgData,
+			PageNum:   i + 1, // Page numbers are 1-based
+		}
+	}
+
+	// Perform OCR recognition
+	responses, err := p.ocrClient.RecognizeBatch(ctx, reqs)
+	if err != nil {
+		return nil, fmt.Errorf("OCR recognition failed: %w", err)
+	}
+
+	// Convert OCR responses to Pages
+	pages := make([]Page, len(responses))
+	for i, resp := range responses {
+		if resp.Error != "" {
+			return nil, fmt.Errorf("OCR failed for page %d: %s", resp.PageNum, resp.Error)
+		}
+
+		pages[i] = Page{
+			Number: resp.PageNum,
+			Text:   resp.Text,
+			// TODO: Store structured OCR data in Page metadata when Page struct supports it
+		}
+	}
+
+	return pages, nil
 }
 
 // SupportedExtensions returns the file extensions supported by this parser.

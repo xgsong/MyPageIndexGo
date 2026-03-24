@@ -70,7 +70,7 @@ func TestPDFParser_Parse_EmptyInput(t *testing.T) {
 func TestPDFParser_extractWithOCR_Error(t *testing.T) {
 	parser := NewPDFParser()
 	// OCR is not configured in standard parser, should return error
-	pages, err := parser.extractWithOCR(nil, []byte("%PDF-1.7"))
+	pages, err := parser.extractWithOCR(context.TODO(), []byte("%PDF-1.7"))
 	assert.Error(t, err)
 	assert.Nil(t, pages)
 	assert.Contains(t, err.Error(), "OCR client not configured")

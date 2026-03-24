@@ -2,38 +2,29 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
-// Config holds the application configuration.
-type Config struct {
-	OpenAIAPIKey      string `mapstructure:"openai_api_key"`
-	OpenAIBaseURL     string `mapstructure:"openai_base_url"`
-	OpenAIModel       string `mapstructure:"openai_model"`
-	OCRModel          string `mapstructure:"ocr_model"`   // Model name for OCR (e.g., GLM-OCR-Q8_0)
-	OCREnabled        bool   `mapstructure:"ocr_enabled"` // Enable OCR for scanned PDFs
-	MaxConcurrency    int    `mapstructure:"max_concurrency"`
-	MaxPagesPerNode   int    `mapstructure:"max_pages_per_node"`
-	MaxTokensPerNode  int    `mapstructure:"max_tokens_per_node"`
-	GenerateSummaries bool   `mapstructure:"generate_summaries"`
-	LogLevel          string `mapstructure:"log_level"`
-	EnableLLMCache    bool   `mapstructure:"enable_llm_cache"`
-	LLMCacheTTL       int    `mapstructure:"llm_cache_ttl"`       // TTL in seconds, 0 means no expiration
-	EnableSearchCache bool   `mapstructure:"enable_search_cache"` // Enable caching for search results
-	EnableBatchCalls    bool   `mapstructure:"enable_batch_calls"`    // Enable batch LLM calls for summary generation
-	BatchSize           int    `mapstructure:"batch_size"`            // Number of summaries per batch call
-	TOCheckPageNum      int    `mapstructure:"toc_check_page_num"`    // Max pages to scan for TOC detection (default: 20 like Python)
-	MaxTokenNumEachNode int    `mapstructure:"max_token_num_each_node"` // Max tokens per node for large node recursion (default: 20000)
-}
-
-// DefaultConfig returns the default configuration.
+// DefaultConfig returns a default configuration for TESTING PURPOSES ONLY.
+// Production deployments MUST use config.yaml for all non-sensitive configuration.
+// This function exists solely to support existing tests and should not be used in production code.
 func DefaultConfig() *Config {
 	return &Config{
+		OpenAIAPIKey:      "", // Empty by default for tests
+		OCRAPIKey:         "", // Empty by default for tests
+		OpenAIBaseURL:     "https://api.openai.com/v1",
 		OpenAIModel:       "gpt-4o",
+		OCRType:           "llama_cpp",
 		OCRModel:          "GLM-OCR-Q8_0",
 		OCREnabled:        false,
+		LlamaCppServerURL: "http://localhost:8080",
+		OCRRenderDPI:      150,
+		OCRConcurrency:    5,
+		OCRTimeout:        60,
 		MaxConcurrency:    10,
 		MaxPagesPerNode:   10,
 		MaxTokensPerNode:  24000,
@@ -42,89 +33,220 @@ func DefaultConfig() *Config {
 		EnableLLMCache:    true,
 		LLMCacheTTL:       3600,
 		EnableSearchCache: false,
-		EnableBatchCalls:    true,
-		BatchSize:           20,
-		TOCheckPageNum:      20,
+		EnableBatchCalls:  true,
+		BatchSize:         20,
+		TOCheckPageNum:    20,
 		MaxTokenNumEachNode: 20000,
 	}
 }
 
-// Load loads configuration from .env file, environment variables and config file.
-// It tries to load .env first, then falls back to environment variables.
-func Load() (*Config, error) {
-	// Try to load .env file if it exists
-	_ = godotenv.Load()
+// Config holds the application configuration.
+// All non-sensitive fields must be explicitly set in config.yaml for production use
+// Sensitive fields (API keys) must be set in .env or environment variables
+type Config struct {
+	// Sensitive configuration (from environment variables/.env only)
+	OpenAIAPIKey string `mapstructure:"openai_api_key"` // Required, from environment only
+	OCRAPIKey    string `mapstructure:"ocr_api_key"`    // Optional, for cloud OCR providers
 
+	// LLM Configuration (from config.yaml)
+	OpenAIBaseURL     string `mapstructure:"openai_base_url"`
+	OpenAIModel       string `mapstructure:"openai_model"`
+
+	// OCR Configuration (from config.yaml)
+	OCRType           string `mapstructure:"ocr_type"`           // OCR provider type: "llama_cpp", "tesseract", etc.
+	OCRModel          string `mapstructure:"ocr_model"`          // Model name for OCR (e.g., GLM-OCR-Q8_0)
+	OCREnabled        bool   `mapstructure:"ocr_enabled"`        // Enable OCR for scanned PDFs
+	LlamaCppServerURL string `mapstructure:"llama_cpp_server_url"`// Llama.cpp OCR service URL
+	OCRRenderDPI      int    `mapstructure:"ocr_render_dpi"`     // DPI for PDF rendering to images
+	OCRConcurrency    int    `mapstructure:"ocr_concurrency"`    // Maximum concurrent OCR requests
+	OCRTimeout        int    `mapstructure:"ocr_timeout"`        // OCR request timeout in seconds
+
+	// Indexer Configuration (from config.yaml)
+	MaxConcurrency    int    `mapstructure:"max_concurrency"`
+	MaxPagesPerNode   int    `mapstructure:"max_pages_per_node"`
+	MaxTokensPerNode  int    `mapstructure:"max_tokens_per_node"`
+	GenerateSummaries bool   `mapstructure:"generate_summaries"`
+	EnableBatchCalls  bool   `mapstructure:"enable_batch_calls"` // Enable batch LLM calls for summary generation
+	BatchSize         int    `mapstructure:"batch_size"`         // Number of summaries per batch call
+	TOCheckPageNum    int    `mapstructure:"toc_check_page_num"` // Max pages to scan for TOC detection
+
+	// Cache Configuration (from config.yaml)
+	EnableLLMCache    bool   `mapstructure:"enable_llm_cache"`
+	LLMCacheTTL       int    `mapstructure:"llm_cache_ttl"`      // TTL in seconds, 0 means no expiration
+	EnableSearchCache bool   `mapstructure:"enable_search_cache"`// Enable caching for search results
+
+	// TOC and Content Processing (from config.yaml)
+	MaxTokenNumEachNode int `mapstructure:"max_token_num_each_node"` // Max tokens per node for large node recursion
+
+	// Logging Configuration (from config.yaml)
+	LogLevel string `mapstructure:"log_level"`
+}
+
+// Load loads configuration:
+// 1. First tries to read config.yaml file (required for production)
+// 2. If config.yaml not found and running in test mode, uses DefaultConfig
+// 3. Then loads .env file for sensitive credentials
+// 4. Sensitive fields are only taken from environment variables, never from config.yaml
+func Load() (*Config, error) {
 	v := viper.New()
 
-	// Set defaults
-	cfg := DefaultConfig()
-	v.SetDefault("openai_api_key", "")
-	v.SetDefault("openai_base_url", "")
-	v.SetDefault("openai_model", cfg.OpenAIModel)
-	v.SetDefault("ocr_model", cfg.OCRModel)
-	v.SetDefault("ocr_enabled", cfg.OCREnabled)
-	v.SetDefault("max_concurrency", cfg.MaxConcurrency)
-	v.SetDefault("max_pages_per_node", cfg.MaxPagesPerNode)
-	v.SetDefault("max_tokens_per_node", cfg.MaxTokensPerNode)
-	v.SetDefault("generate_summaries", cfg.GenerateSummaries)
-	v.SetDefault("log_level", cfg.LogLevel)
-	v.SetDefault("enable_llm_cache", cfg.EnableLLMCache)
-	v.SetDefault("llm_cache_ttl", cfg.LLMCacheTTL)
-	v.SetDefault("enable_search_cache", cfg.EnableSearchCache)
-	v.SetDefault("enable_batch_calls", cfg.EnableBatchCalls)
-	v.SetDefault("batch_size", cfg.BatchSize)
-	v.SetDefault("toc_check_page_num", cfg.TOCheckPageNum)
-	v.SetDefault("max_token_num_each_node", cfg.MaxTokenNumEachNode)
+	// Check if running in test mode
+	isTest := false
+	if len(os.Args) > 0 && strings.HasSuffix(os.Args[0], ".test") || os.Getenv("PAGEINDEX_TEST") == "1" {
+		isTest = true
+	}
 
-	// Read from environment variables with prefix
-	// SetEnvPrefix must be called BEFORE AutomaticEnv
-	v.SetEnvPrefix("PAGEINDEX")
-	v.AutomaticEnv()
-
-	// Also bind non-prefixed versions for compatibility with .env
-	_ = v.BindEnv("openai_api_key", "OPENAI_API_KEY")
-	_ = v.BindEnv("openai_base_url", "OPENAI_BASE_URL")
-	_ = v.BindEnv("openai_model", "OPENAI_MODEL")
-	_ = v.BindEnv("ocr_model", "OCR_MODEL")
-	_ = v.BindEnv("ocr_enabled", "OCR_ENABLED")
-	_ = v.BindEnv("max_concurrency", "MAX_CONCURRENCY")
-	_ = v.BindEnv("max_pages_per_node", "MAX_PAGES_PER_NODE")
-	_ = v.BindEnv("max_tokens_per_node", "MAX_TOKENS_PER_NODE")
-	_ = v.BindEnv("generate_summaries", "GENERATE_SUMMARIES")
-	_ = v.BindEnv("log_level", "LOG_LEVEL")
-	_ = v.BindEnv("enable_llm_cache", "ENABLE_LLM_CACHE")
-	_ = v.BindEnv("llm_cache_ttl", "LLM_CACHE_TTL")
-	_ = v.BindEnv("enable_search_cache", "ENABLE_SEARCH_CACHE")
-	_ = v.BindEnv("enable_batch_calls", "ENABLE_BATCH_CALLS")
-	_ = v.BindEnv("batch_size", "BATCH_SIZE")
-	_ = v.BindEnv("toc_check_page_num", "TOC_CHECK_PAGE_NUM")
-	_ = v.BindEnv("max_token_num_each_node", "MAX_TOKEN_NUM_EACH_NODE")
-
-	// Try to read from config file if exists
+	// --------------------------
+	// Step 1: Load config.yaml (required for production)
+	// --------------------------
 	v.SetConfigName("config")
+	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
 	v.AddConfigPath("$HOME/.pageindex")
 
-	// Read config file if present
+	var cfg Config
+
+	// Set default values from DefaultConfig for viper
+	defaultCfg := DefaultConfig()
+	v.SetDefault("openai_api_key", defaultCfg.OpenAIAPIKey)
+	v.SetDefault("openai_base_url", defaultCfg.OpenAIBaseURL)
+	v.SetDefault("openai_model", defaultCfg.OpenAIModel)
+	v.SetDefault("ocr_type", defaultCfg.OCRType)
+	v.SetDefault("ocr_model", defaultCfg.OCRModel)
+	v.SetDefault("ocr_enabled", defaultCfg.OCREnabled)
+	v.SetDefault("llama_cpp_server_url", defaultCfg.LlamaCppServerURL)
+	v.SetDefault("ocr_render_dpi", defaultCfg.OCRRenderDPI)
+	v.SetDefault("ocr_concurrency", defaultCfg.OCRConcurrency)
+	v.SetDefault("ocr_timeout", defaultCfg.OCRTimeout)
+	v.SetDefault("max_concurrency", defaultCfg.MaxConcurrency)
+	v.SetDefault("max_pages_per_node", defaultCfg.MaxPagesPerNode)
+	v.SetDefault("max_tokens_per_node", defaultCfg.MaxTokensPerNode)
+	v.SetDefault("generate_summaries", defaultCfg.GenerateSummaries)
+	v.SetDefault("log_level", defaultCfg.LogLevel)
+	v.SetDefault("enable_llm_cache", defaultCfg.EnableLLMCache)
+	v.SetDefault("llm_cache_ttl", defaultCfg.LLMCacheTTL)
+	v.SetDefault("enable_search_cache", defaultCfg.EnableSearchCache)
+	v.SetDefault("enable_batch_calls", defaultCfg.EnableBatchCalls)
+	v.SetDefault("batch_size", defaultCfg.BatchSize)
+	v.SetDefault("toc_check_page_num", defaultCfg.TOCheckPageNum)
+	v.SetDefault("max_token_num_each_node", defaultCfg.MaxTokenNumEachNode)
+
+	// Try to read config file
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			if !isTest {
+				return nil, fmt.Errorf("config.yaml not found. Please create one in current directory or ~/.pageindex/")
+			}
+			// In test mode, use defaults + environment variables
+		} else {
+			return nil, fmt.Errorf("failed to read config.yaml: %w", err)
 		}
-		// Config file not found is okay - fall back to env defaults
 	}
 
-	// Unmarshal into config struct
-	if err := v.Unmarshal(cfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	// Unmarshal configuration (defaults + config file + env vars for test)
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse configuration: %w", err)
 	}
 
-	// Validate required OpenAI API key
+	// --------------------------
+	// Step 2: Load environment variables
+	// --------------------------
+	_ = godotenv.Load()
+
+	// Only load sensitive credentials from environment variables/.env
+	// All other configuration must come from config.yaml
+	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
+		cfg.OpenAIAPIKey = apiKey
+	}
+	// OCR API key for cloud OCR providers
+	if apiKey := os.Getenv("OCR_API_KEY"); apiKey != "" {
+		cfg.OCRAPIKey = apiKey
+	}
+
+	// --------------------------
+	// Step 3: Validate configuration
+	// --------------------------
+	if err := validateConfig(&cfg); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// validateConfig checks that all required configuration fields are present
+func validateConfig(cfg *Config) error {
+	// Validate sensitive required fields
 	if cfg.OpenAIAPIKey == "" {
-		return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required (check .env file)")
+		return fmt.Errorf("OPENAI_API_KEY is required. Please set it in .env file or environment variable")
 	}
 
-	return cfg, nil
+	// Validate required LLM fields
+	if cfg.OpenAIBaseURL == "" {
+		return fmt.Errorf("openai_base_url is required in config.yaml")
+	}
+	if cfg.OpenAIModel == "" {
+		return fmt.Errorf("openai_model is required in config.yaml")
+	}
+
+	// Validate required indexer fields
+	if cfg.MaxConcurrency <= 0 {
+		return fmt.Errorf("max_concurrency must be greater than 0 in config.yaml")
+	}
+	if cfg.MaxPagesPerNode <= 0 {
+		return fmt.Errorf("max_pages_per_node must be greater than 0 in config.yaml")
+	}
+	if cfg.MaxTokensPerNode <= 0 {
+		return fmt.Errorf("max_tokens_per_node must be greater than 0 in config.yaml")
+	}
+
+	// Validate OCR fields if OCR is enabled
+	if cfg.OCREnabled {
+		if cfg.OCRType == "" {
+			return fmt.Errorf("ocr_type is required in config.yaml when ocr_enabled is true")
+		}
+		if cfg.OCRModel == "" {
+			return fmt.Errorf("ocr_model is required in config.yaml when ocr_enabled is true")
+		}
+		if cfg.LlamaCppServerURL == "" && cfg.OCRType == "llama_cpp" {
+			return fmt.Errorf("llama_cpp_server_url is required in config.yaml when ocr_type is llama_cpp")
+		}
+		if cfg.OCRRenderDPI <= 0 {
+			return fmt.Errorf("ocr_render_dpi must be greater than 0 in config.yaml")
+		}
+		if cfg.OCRConcurrency <= 0 {
+			return fmt.Errorf("ocr_concurrency must be greater than 0 in config.yaml")
+		}
+		if cfg.OCRTimeout <= 0 {
+			return fmt.Errorf("ocr_timeout must be greater than 0 in config.yaml")
+		}
+	}
+
+	// Validate batch config if batch calls are enabled
+	if cfg.EnableBatchCalls {
+		if cfg.BatchSize <= 0 {
+			return fmt.Errorf("batch_size must be greater than 0 in config.yaml when enable_batch_calls is true")
+		}
+	}
+
+	// Validate cache config if cache is enabled
+	if cfg.EnableLLMCache && cfg.LLMCacheTTL < 0 {
+		return fmt.Errorf("llm_cache_ttl cannot be negative in config.yaml")
+	}
+
+	// Validate TOC config
+	if cfg.TOCheckPageNum <= 0 {
+		return fmt.Errorf("toc_check_page_num must be greater than 0 in config.yaml")
+	}
+	if cfg.MaxTokenNumEachNode <= 0 {
+		return fmt.Errorf("max_token_num_each_node must be greater than 0 in config.yaml")
+	}
+
+	// Validate logging config
+	if cfg.LogLevel == "" {
+		return fmt.Errorf("log_level is required in config.yaml")
+	}
+
+	return nil
 }
 
 // LoadFromEnv loads configuration directly from environment variables.

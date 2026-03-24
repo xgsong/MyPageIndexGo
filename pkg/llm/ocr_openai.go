@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strings"
 
 	"github.com/sashabaranov/go-openai"
 	"github.com/xgsong/mypageindexgo/pkg/config"
@@ -20,11 +21,15 @@ type OpenAIOCRClient struct {
 
 // NewOpenAIOCRClient creates a new OCR client from configuration.
 func NewOpenAIOCRClient(cfg *config.Config) *OpenAIOCRClient {
-	clientConfig := openai.DefaultConfig(cfg.OpenAIAPIKey)
-	if cfg.OpenAIBaseURL != "" {
-		baseURL := cfg.OpenAIBaseURL
+	clientConfig := openai.DefaultConfig(cfg.OCRAPIKey)
+	if cfg.LlamaCppServerURL != "" {
+		baseURL := cfg.LlamaCppServerURL
 		if len(baseURL) > 0 && baseURL[len(baseURL)-1] != '/' {
 			baseURL += "/"
+		}
+		// Ensure URL ends with /v1 for OpenAI compatibility
+		if !strings.HasSuffix(baseURL, "v1/") {
+			baseURL += "v1/"
 		}
 		clientConfig.BaseURL = baseURL
 	}
@@ -71,8 +76,11 @@ func (c *OpenAIOCRClient) Recognize(ctx context.Context, req *document.OCRReques
 			},
 			{
 				Role:    openai.ChatMessageRoleUser,
-				Content: "Extract all text from this image:",
 				MultiContent: []openai.ChatMessagePart{
+					{
+						Type: openai.ChatMessagePartTypeText,
+						Text: "Extract all text from this image:",
+					},
 					{
 						Type: openai.ChatMessagePartTypeImageURL,
 						ImageURL: &openai.ChatMessageImageURL{
