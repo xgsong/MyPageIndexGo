@@ -89,10 +89,7 @@ func Load() (*Config, error) {
 	v := viper.New()
 
 	// Check if running in test mode
-	isTest := false
-	if len(os.Args) > 0 && strings.HasSuffix(os.Args[0], ".test") || os.Getenv("PAGEINDEX_TEST") == "1" {
-		isTest = true
-	}
+	isTest := os.Getenv("PAGEINDEX_TEST") == "1" || (len(os.Args) > 0 && strings.HasSuffix(os.Args[0], ".test"))
 
 	// --------------------------
 	// Step 1: Load config.yaml (required for production)
