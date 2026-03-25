@@ -38,7 +38,7 @@ ocr_timeout: 60
 # Indexer Configuration
 # -----------------------------------------------------------------------------
 # Maximum concurrent LLM API calls
-max_concurrency: 10
+max_concurrency: 20
 
 # Maximum number of pages per index node
 max_pages_per_node: 10
@@ -60,6 +60,15 @@ toc_check_page_num: 20
 
 # Maximum tokens per node for large node recursion
 max_token_num_each_node: 20000
+
+# -----------------------------------------------------------------------------
+# Performance Optimization
+# -----------------------------------------------------------------------------
+# Skip TOC fix retry to improve performance (may reduce accuracy)
+skip_toc_fix: false
+
+# Skip title appearance check to improve performance
+skip_appearance_check: false
 
 # -----------------------------------------------------------------------------
 # Cache Configuration

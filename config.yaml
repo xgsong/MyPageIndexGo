@@ -62,6 +62,15 @@ toc_check_page_num: 20
 max_token_num_each_node: 20000
 
 # -----------------------------------------------------------------------------
+# Performance Optimization
+# -----------------------------------------------------------------------------
+# Skip TOC fix retry to improve performance (may reduce accuracy)
+skip_toc_fix: false
+
+# Skip title appearance check to improve performance
+skip_appearance_check: false
+
+# -----------------------------------------------------------------------------
 # Cache Configuration
 # -----------------------------------------------------------------------------
 # Enable LLM response caching to reduce API calls
