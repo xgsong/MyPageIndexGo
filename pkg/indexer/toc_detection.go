@@ -285,21 +285,22 @@ func (d *TOCDetector) detectTOCPagesBatch(ctx context.Context, pages []string, s
 // Python: find_toc_pages in page_index.py:341-366
 // Only stops at maxPages if not currently finding consecutive TOC pages.
 // OPTIMIZED: Uses batch detection to reduce LLM calls from N (pages) to N/batchSize
+// FALLBACK: If batch detection fails or returns no results, falls back to per-page detection
 func (d *TOCDetector) findTOCPages(ctx context.Context, pages []string, maxPages int, startPageIndex int) ([]int, error) {
 	const batchSize = 5
 
 	var tocPages []int
 	lastPageWasTOC := false
 	endPage := min(len(pages), maxPages)
+	allBatchesProcessed := true
 
 	for batchStart := startPageIndex; batchStart < endPage; {
 		batchEnd := min(batchStart+batchSize, endPage)
 
 		batchTOCPages, err := d.detectTOCPagesBatch(ctx, pages, batchStart, batchEnd)
 		if err != nil {
-			log.Warn().Err(err).Int("batch_start", batchStart).Msg("Batch TOC detection failed")
-			batchStart = batchEnd
-			continue
+			log.Warn().Err(err).Int("batch_start", batchStart).Msg("Batch TOC detection failed, falling back to per-page")
+			return d.findTOCPagesPerPage(ctx, pages, maxPages, startPageIndex)
 		}
 
 		if len(batchTOCPages) > 0 {
@@ -314,6 +315,42 @@ func (d *TOCDetector) findTOCPages(ctx context.Context, pages []string, maxPages
 		}
 
 		batchStart = batchEnd
+	}
+
+	// If no TOC found after all batches, fall back to per-page detection
+	if len(tocPages) == 0 && allBatchesProcessed {
+		log.Info().Msg("Batch detection completed but found no TOC, falling back to per-page detection")
+		return d.findTOCPagesPerPage(ctx, pages, maxPages, startPageIndex)
+	}
+
+	return tocPages, nil
+}
+
+// findTOCPagesPerPage performs per-page TOC detection (original implementation)
+// Used as fallback when batch detection fails
+func (d *TOCDetector) findTOCPagesPerPage(ctx context.Context, pages []string, maxPages int, startPageIndex int) ([]int, error) {
+	var tocPages []int
+	lastPageWasTOC := false
+
+	for i := startPageIndex; i < len(pages); i++ {
+		if i >= maxPages && !lastPageWasTOC {
+			break
+		}
+
+		isTOC, err := d.detectTOCPage(ctx, pages[i])
+		if err != nil {
+			log.Warn().Err(err).Int("page", i).Msg("TOC detection failed")
+			continue
+		}
+
+		if isTOC {
+			log.Info().Int("page", i).Msg("Page has TOC")
+			tocPages = append(tocPages, i)
+			lastPageWasTOC = true
+		} else if lastPageWasTOC {
+			log.Info().Int("page", i-1).Msg("Found last TOC page")
+			break
+		}
 	}
 
 	return tocPages, nil

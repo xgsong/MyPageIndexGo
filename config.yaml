@@ -65,10 +65,10 @@ max_token_num_each_node: 20000
 # Performance Optimization
 # -----------------------------------------------------------------------------
 # Skip TOC fix retry to improve performance (may reduce accuracy)
-skip_toc_fix: false
+skip_toc_fix: true
 
 # Skip title appearance check to improve performance
-skip_appearance_check: false
+skip_appearance_check: true
 
 # -----------------------------------------------------------------------------
 # Cache Configuration
