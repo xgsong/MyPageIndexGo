@@ -42,7 +42,7 @@ Instead, PageIndex:
 | **Binary Size** | N/A (requires Python) | ✅ ~17MB standard, ~25MB with OCR |
 | **Configuration** | Python config files | ✅ Environment variables + .env + config files |
 | **CLI Interface** | Python CLI | ✅ Native Go CLI with structured logging |
-| **OCR Support** | Not built-in | ✅ Optional OCR build with Tesseract |
+| **OCR Support** | Not built-in | ✅ Optional OCR with local OCR service (llava-ocr, GLM-OCR) |
 | **Storage Backend** | Local JSON | ✅ Local JSON (extensible for more backends) |
 
 ## Key Features
@@ -79,25 +79,17 @@ go build -o pageindex ./cmd/pageindex
 ```
 
 #### Build with OCR support (for scanned PDFs)
-Requires Tesseract OCR engine installed first:
+Requires a local OCR service (such as llava-ocr or GLM-OCR) running first:
 ```bash
-# Ubuntu/Debian
-sudo apt install tesseract-ocr libtesseract-dev
+# Start your OCR service on localhost:8080 (or your custom URL)
 
-# macOS
-brew install tesseract
-
-# Windows
-# Download from https://github.com/UB-Mannheim/tesseract/wiki
-
-# Build with OCR tag
-CGO_ENABLED=1 go build -tags ocr -o pageindex ./cmd/pageindex
+# Build with OCR enabled (OCR is configured via config.yaml)
+go build -o pageindex ./cmd/pageindex
 ```
 
 Or with Make:
 ```bash
 make build          # Standard build
-make build-ocr      # Build with OCR support
 ```
 
 ## Configuration
@@ -105,21 +97,23 @@ make build-ocr      # Build with OCR support
 Set your OpenAI API key in a `.env` file or environment variable:
 
 ```bash
-export PAGEINDEX_OPENAI_API_KEY=your_openai_api_key_here
+export OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-Optional configuration:
+All other configuration options (model, OCR settings, concurrency, etc.) must be set in `config.yaml`. See `config.yaml.example` for available options:
+
 ```bash
-export PAGEINDEX_OPENAI_BASE_URL=https://your-custom-base-url.com/  # For self-hosted models
-export PAGEINDEX_OPENAI_MODEL=gpt-4o                               # Default: gpt-4o
-export PAGEINDEX_MAX_CONCURRENCY=10                                 # Default: 5
-export PAGEINDEX_MAX_TOKENS_PER_NODE=16000                          # Default: 16000
-export PAGEINDEX_GENERATE_SUMMARIES=false                            # Default: false
-export PAGEINDEX_LOG_LEVEL=info                                      # Default: info
-export PAGEINDEX_ENABLE_CACHE=true                                   # Enable LLM response caching (default: true)
-export PAGEINDEX_CACHE_TTL=3600                                      # Cache TTL in seconds (default: 3600)
-export PAGEINDEX_ENABLE_BATCH_CALLS=true                             # Enable batch LLM calls for summary generation (default: true)
-export PAGEINDEX_BATCH_SIZE=10                                       # Number of summaries per batch call (default: 10)
+# Example config.yaml settings
+openai_base_url: "https://api.openai.com/v1"    # Or your custom API URL
+openai_model: "gpt-4o"                           # Default: gpt-4o
+max_concurrency: 10                              # Default: 10
+max_tokens_per_node: 24000                       # Default: 24000
+generate_summaries: false                        # Default: false
+log_level: "info"                                 # Default: info
+enable_llm_cache: true                           # Enable LLM response caching (default: true)
+llm_cache_ttl: 3600                              # Cache TTL in seconds (default: 3600)
+enable_batch_calls: true                         # Enable batch LLM calls for summary generation (default: true)
+batch_size: 20                                   # Number of summaries per batch call (default: 20)
 ```
 
 ## Usage
@@ -130,7 +124,7 @@ export PAGEINDEX_BATCH_SIZE=10                                       # Number of
 # From text-based PDF
 ./pageindex generate --pdf document.pdf --output index.json
 
-# From scanned PDF (requires OCR build)
+# From scanned PDF (requires OCR enabled in config.yaml)
 ./pageindex generate --pdf scanned-document.pdf --output index.json
 
 # From Markdown
@@ -211,7 +205,7 @@ mypageindexgo/
 │   ├── config/             # Configuration handling
 │   ├── document/           # Document parsing (PDF/Markdown/OCR)
 │   ├── llm/                # LLM client abstraction
-│   ├── tokenizer/          # Token counting with tiktoken
+│   ├── tokenizer/          # Token counting
 │   ├── indexer/            # Index generation and search
 │   ├── logging/            # Structured logging
 │   └── output/             # JSON output handling
@@ -383,7 +377,7 @@ PageIndex 是一种革命性的 RAG 实现方案，不需要：
 | **二进制体积** | N/A (需要 Python) | ✅ ~17MB 标准版，~25MB OCR 版 |
 | **配置管理** | Python 配置文件 | ✅ 环境变量 + .env + 配置文件 |
 | **CLI 界面** | Python CLI | ✅ 原生 Go CLI，结构化日志 |
-| **OCR 支持** | 非内置 | ✅ 可选 OCR 构建，支持 Tesseract |
+| **OCR 支持** | 非内置 | ✅ 可选 OCR 支持，使用本地 OCR 服务 (llava-ocr, GLM-OCR) |
 | **存储后端** | 本地 JSON | ✅ 本地 JSON（可扩展更多后端）|
 
 ## 核心功能
@@ -420,25 +414,17 @@ go build -o pageindex ./cmd/pageindex
 ```
 
 #### 编译带OCR支持（用于扫描版PDF）
-需要先安装 Tesseract OCR 引擎：
+需要先启动本地 OCR 服务（如 llava-ocr 或 GLM-OCR）：
 ```bash
-# Ubuntu/Debian
-sudo apt install tesseract-ocr libtesseract-dev tesseract-ocr-chi-sim
+# 启动 OCR 服务在 localhost:8080（或自定义 URL）
 
-# macOS
-brew install tesseract tesseract-lang
-
-# Windows
-# 从 https://github.com/UB-Mannheim/tesseract/wiki 下载安装，选择中文语言包
-
-# 使用 ocr 标签编译
-CGO_ENABLED=1 go build -tags ocr -o pageindex ./cmd/pageindex
+# 编译时启用 OCR 支持（OCR 通过 config.yaml 配置）
+go build -o pageindex ./cmd/pageindex
 ```
 
 使用 Make 编译：
 ```bash
 make build          # 标准编译
-make build-ocr      # 带OCR支持编译
 ```
 
 ## 配置
@@ -446,21 +432,23 @@ make build-ocr      # 带OCR支持编译
 在 `.env` 文件或环境变量中设置 OpenAI API 密钥：
 
 ```bash
-export PAGEINDEX_OPENAI_API_KEY=你的OpenAI_API密钥
+export OPENAI_API_KEY=你的OpenAI_API密钥
 ```
 
-可选配置：
+所有其他配置选项（模型、OCR 设置、并发数等）必须在 `config.yaml` 中设置。详见 `config.yaml.example`：
+
 ```bash
-export PAGEINDEX_OPENAI_BASE_URL=https://你的自定义API地址.com/  # 用于自托管模型
-export PAGEINDEX_OPENAI_MODEL=gpt-4o                               # 默认: gpt-4o
-export PAGEINDEX_MAX_CONCURRENCY=10                                 # 默认: 5
-export PAGEINDEX_MAX_TOKENS_PER_NODE=16000                          # 默认: 16000
-export PAGEINDEX_GENERATE_SUMMARIES=false                            # 默认: false
-export PAGEINDEX_LOG_LEVEL=info                                      # 默认: info
-export PAGEINDEX_ENABLE_CACHE=true                                   # 启用 LLM 响应缓存 (默认: true)
-export PAGEINDEX_CACHE_TTL=3600                                      # 缓存有效期，单位秒 (默认: 3600)
-export PAGEINDEX_ENABLE_BATCH_CALLS=true                             # 启用摘要生成批量 LLM 调用 (默认: true)
-export PAGEINDEX_BATCH_SIZE=10                                       # 每批调用包含的摘要数量 (默认: 10)
+# config.yaml 示例配置
+openai_base_url: "https://api.openai.com/v1"    # 或你的自定义 API 地址
+openai_model: "gpt-4o"                          # 默认: gpt-4o
+max_concurrency: 10                             # 默认: 10
+max_tokens_per_node: 24000                       # 默认: 24000
+generate_summaries: false                        # 默认: false
+log_level: "info"                                # 默认: info
+enable_llm_cache: true                           # 启用 LLM 响应缓存 (默认: true)
+llm_cache_ttl: 3600                              # 缓存有效期，单位秒 (默认: 3600)
+enable_batch_calls: true                         # 启用摘要生成批量 LLM 调用 (默认: true)
+batch_size: 20                                   # 每批调用包含的摘要数量 (默认: 20)
 ```
 
 ## 使用说明
@@ -471,7 +459,7 @@ export PAGEINDEX_BATCH_SIZE=10                                       # 每批调
 # 从文本型PDF生成
 ./pageindex generate --pdf document.pdf --output index.json
 
-# 从扫描版PDF生成（需要OCR编译版本）
+# 从扫描版PDF生成（需要在 config.yaml 中启用 OCR）
 ./pageindex generate --pdf scanned-document.pdf --output index.json
 
 # 从Markdown生成
@@ -518,7 +506,7 @@ mypageindexgo/
 │   ├── config/             # 配置处理
 │   ├── document/           # 文档解析 (PDF/Markdown/OCR)
 │   ├── llm/                # LLM 客户端抽象
-│   ├── tokenizer/          # 基于 tiktoken 的 token 计数
+│   ├── tokenizer/          # Token 计数
 │   ├── indexer/            # 索引生成和搜索
 │   ├── logging/            # 结构化日志
 │   └── output/             # JSON 输出处理
