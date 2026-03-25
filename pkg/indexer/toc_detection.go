@@ -33,6 +33,38 @@ Directly return the final JSON structure. Do not output anything else.
 Please note: abstract, summary, notation list, figure list, table list, etc. are not table of contents.`, content)
 }
 
+// batchTOCDetectorPrompt creates prompt for batch TOC detection across multiple pages
+func batchTOCDetectorPrompt(pageContents map[int]string) string {
+	var content strings.Builder
+	for pageNum, text := range pageContents {
+		truncated := text
+		if len(text) > 2000 {
+			truncated = text[:2000] + "..."
+		}
+		content.WriteString(fmt.Sprintf("=== Page %d ===\n%s\n\n", pageNum, truncated))
+	}
+
+	return fmt.Sprintf(`You are given multiple pages of a document. Your task is to detect which pages contain a Table of Contents (目录).
+
+A Table of Contents typically:
+- Contains chapter/section titles with page numbers
+- Has a "目录", "Table of Contents", "CHAPTER", "章", "第一节", etc. heading
+- Lists section names in sequence
+
+Abstract, summary, preface, figure list, table list, acknowledgments, and main body content are NOT table of contents.
+
+Given pages:
+%s
+
+Return a JSON array listing all page numbers that contain Table of Contents:
+{
+    "toc_pages": [page_number1, page_number2, ...]
+}
+
+If no page contains TOC, return empty array: {"toc_pages": []}
+Return ONLY the JSON. No explanation.`, content.String())
+}
+
 // tocTransformerPrompt creates prompt for TOC transformation
 func tocTransformerPrompt(tocContent string) string {
 	return fmt.Sprintf(`你现在需要将给定的目录内容转换为标准的JSON格式。
@@ -204,33 +236,76 @@ func (d *TOCDetector) detectTOCPage(ctx context.Context, content string) (bool, 
 	return strings.ToLower(result.TOCDetected) == "yes", nil
 }
 
+// detectTOCPagesBatch detects TOC pages in batch using a single LLM call
+func (d *TOCDetector) detectTOCPagesBatch(ctx context.Context, pages []string, startIndex, endIndex int) ([]int, error) {
+	if startIndex >= endIndex || startIndex >= len(pages) {
+		return nil, nil
+	}
+
+	if endIndex > len(pages) {
+		endIndex = len(pages)
+	}
+
+	pageContents := make(map[int]string)
+	for i := startIndex; i < endIndex; i++ {
+		pageContents[i] = pages[i]
+	}
+
+	prompt := batchTOCDetectorPrompt(pageContents)
+	response, err := d.llmClient.GenerateSimple(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect TOC in batch: %w", err)
+	}
+
+	var result BatchTOCDetectorResult
+	if err := parseLLMJSONResponse(response, &result); err != nil {
+		log.Warn().Err(err).Str("response", response).Msg("Failed to parse batch TOC detection response")
+		return nil, nil
+	}
+
+	var tocPages []int
+	for _, pageNum := range result.TOCPages {
+		if pageNum >= startIndex && pageNum < endIndex {
+			tocPages = append(tocPages, pageNum)
+		}
+	}
+
+	return tocPages, nil
+}
+
 // findTOCPages scans pages to find TOC pages starting from startPageIndex.
 // Python: find_toc_pages in page_index.py:341-366
 // Only stops at maxPages if not currently finding consecutive TOC pages.
+// OPTIMIZED: Uses batch detection to reduce LLM calls from N (pages) to N/batchSize
 func (d *TOCDetector) findTOCPages(ctx context.Context, pages []string, maxPages int, startPageIndex int) ([]int, error) {
+	const batchSize = 5
+
 	var tocPages []int
 	lastPageWasTOC := false
+	endPage := min(len(pages), maxPages)
 
-	for i := startPageIndex; i < len(pages); i++ {
-		// Only enforce maxPages limit when not in the middle of finding TOC pages
-		if i >= maxPages && !lastPageWasTOC {
-			break
-		}
+	for batchStart := startPageIndex; batchStart < endPage; {
+		batchEnd := min(batchStart+batchSize, endPage)
 
-		isTOC, err := d.detectTOCPage(ctx, pages[i])
+		batchTOCPages, err := d.detectTOCPagesBatch(ctx, pages, batchStart, batchEnd)
 		if err != nil {
-			log.Warn().Err(err).Int("page", i).Msg("TOC detection failed")
+			log.Warn().Err(err).Int("batch_start", batchStart).Msg("Batch TOC detection failed")
+			batchStart = batchEnd
 			continue
 		}
 
-		if isTOC {
-			log.Info().Int("page", i).Msg("Page has TOC")
-			tocPages = append(tocPages, i)
-			lastPageWasTOC = true
+		if len(batchTOCPages) > 0 {
+			for _, pageIdx := range batchTOCPages {
+				log.Info().Int("page", pageIdx).Msg("Page has TOC (batch)")
+				tocPages = append(tocPages, pageIdx)
+				lastPageWasTOC = true
+			}
 		} else if lastPageWasTOC {
-			log.Info().Int("page", i-1).Msg("Found last TOC page")
+			log.Info().Int("page", batchStart-1).Msg("Found last TOC page")
 			break
 		}
+
+		batchStart = batchEnd
 	}
 
 	return tocPages, nil

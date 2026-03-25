@@ -79,6 +79,11 @@ type TOCIndexExtractorResult struct {
 	PhysicalIndex interface{} `json:"physical_index"` // Can be string or number
 }
 
+// BatchTOCDetectorResult is LLM response for batch TOC detection
+type BatchTOCDetectorResult struct {
+	TOCPages []int `json:"toc_pages"`
+}
+
 // GetPhysicalIndexAsString converts PhysicalIndex to string regardless of its underlying type
 func (t *TOCIndexExtractorResult) GetPhysicalIndexAsString() string {
 	switch v := t.PhysicalIndex.(type) {
