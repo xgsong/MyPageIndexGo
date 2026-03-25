@@ -1,6 +1,6 @@
 # PageIndex Go
 
-> 🤖 This project is 100% written by AI (Claude Code + Doubao-Seed-2.0-pro), no human coding involved!
+> 🤖 This project is 100% written by AI (Trae + MiniMax-M2.7), no human coding involved!
 >
 > Go port of [VectifyAI/PageIndex](https://github.com/VectifyAI/PageIndex) - LLM-based **vectorless, reasoning-based RAG** system.
 
