@@ -342,45 +342,12 @@ func (c *OpenAIClient) GenerateBatchSummaries(ctx context.Context, requests []*B
 	var responses []*BatchSummaryResponse
 	err = c.jsonCleaner.ParseJSON(content, &responses)
 	if err != nil {
-		// If batch parsing fails, fall back to individual calls for each request
-		// This ensures we don't fail the entire batch because of one bad response
-		responses = make([]*BatchSummaryResponse, len(requests))
-		for i, req := range requests {
-			summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
-			if err != nil {
-				responses[i] = &BatchSummaryResponse{
-					NodeID: req.NodeID,
-					Error:  err.Error(),
-				}
-			} else {
-				responses[i] = &BatchSummaryResponse{
-					NodeID:  req.NodeID,
-					Summary: summary,
-				}
-			}
-		}
-		return responses, nil
+		return c.fallbackToIndividualCalls(ctx, requests, lang), nil
 	}
 
 	// Validate responses match request count
 	if len(responses) != len(requests) {
-		// If response count doesn't match, fall back to individual calls
-		responses = make([]*BatchSummaryResponse, len(requests))
-		for i, req := range requests {
-			summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
-			if err != nil {
-				responses[i] = &BatchSummaryResponse{
-					NodeID: req.NodeID,
-					Error:  err.Error(),
-				}
-			} else {
-				responses[i] = &BatchSummaryResponse{
-					NodeID:  req.NodeID,
-					Summary: summary,
-				}
-			}
-		}
-		return responses, nil
+		return c.fallbackToIndividualCalls(ctx, requests, lang), nil
 	}
 
 	// Validate node IDs match
@@ -391,23 +358,7 @@ func (c *OpenAIClient) GenerateBatchSummaries(ctx context.Context, requests []*B
 
 	for _, resp := range responses {
 		if _, ok := requestIDMap[resp.NodeID]; !ok {
-			// If any node ID is missing or incorrect, fall back to individual calls
-			responses = make([]*BatchSummaryResponse, len(requests))
-			for i, req := range requests {
-				summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
-				if err != nil {
-					responses[i] = &BatchSummaryResponse{
-						NodeID: req.NodeID,
-						Error:  err.Error(),
-					}
-				} else {
-					responses[i] = &BatchSummaryResponse{
-						NodeID:  req.NodeID,
-						Summary: summary,
-					}
-				}
-			}
-			return responses, nil
+			return c.fallbackToIndividualCalls(ctx, requests, lang), nil
 		}
 	}
 
@@ -419,6 +370,25 @@ func (c *OpenAIClient) GenerateBatchSummaries(ctx context.Context, requests []*B
 	}
 
 	return sortedResponses, nil
+}
+
+func (c *OpenAIClient) fallbackToIndividualCalls(ctx context.Context, requests []*BatchSummaryRequest, lang language.Language) []*BatchSummaryResponse {
+	responses := make([]*BatchSummaryResponse, len(requests))
+	for i, req := range requests {
+		summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
+		if err != nil {
+			responses[i] = &BatchSummaryResponse{
+				NodeID: req.NodeID,
+				Error:  err.Error(),
+			}
+		} else {
+			responses[i] = &BatchSummaryResponse{
+				NodeID:  req.NodeID,
+				Summary: summary,
+			}
+		}
+	}
+	return responses
 }
 
 // GenerateSimple generates a simple text response from a prompt.
