@@ -18,10 +18,9 @@ func DefaultConfig() *Config {
 		OCRAPIKey:         "", // Empty by default for tests
 		OpenAIBaseURL:     "https://api.openai.com/v1",
 		OpenAIModel:       "gpt-4o",
-		OCRType:           "llama_cpp",
 		OCRModel:          "GLM-OCR-Q8_0",
 		OCREnabled:        false,
-		LlamaCppServerURL: "http://localhost:8080",
+		OpenAIOCRBaseURL:  "http://localhost:8080",
 		OCRRenderDPI:      150,
 		OCRConcurrency:    5,
 		OCRTimeout:        60,
@@ -53,10 +52,9 @@ type Config struct {
 	OpenAIModel       string `mapstructure:"openai_model"`
 
 	// OCR Configuration (from config.yaml)
-	OCRType           string `mapstructure:"ocr_type"`           // OCR provider type: "llama_cpp", "tesseract", etc.
 	OCRModel          string `mapstructure:"ocr_model"`          // Model name for OCR (e.g., GLM-OCR-Q8_0)
 	OCREnabled        bool   `mapstructure:"ocr_enabled"`        // Enable OCR for scanned PDFs
-	LlamaCppServerURL string `mapstructure:"llama_cpp_server_url"`// Llama.cpp OCR service URL
+	OpenAIOCRBaseURL   string `mapstructure:"openai_ocr_base_url"` // OpenAI-compatible OCR API base URL
 	OCRRenderDPI      int    `mapstructure:"ocr_render_dpi"`     // DPI for PDF rendering to images
 	OCRConcurrency    int    `mapstructure:"ocr_concurrency"`    // Maximum concurrent OCR requests
 	OCRTimeout        int    `mapstructure:"ocr_timeout"`        // OCR request timeout in seconds
@@ -111,10 +109,9 @@ func Load() (*Config, error) {
 	v.SetDefault("openai_api_key", defaultCfg.OpenAIAPIKey)
 	v.SetDefault("openai_base_url", defaultCfg.OpenAIBaseURL)
 	v.SetDefault("openai_model", defaultCfg.OpenAIModel)
-	v.SetDefault("ocr_type", defaultCfg.OCRType)
 	v.SetDefault("ocr_model", defaultCfg.OCRModel)
 	v.SetDefault("ocr_enabled", defaultCfg.OCREnabled)
-	v.SetDefault("llama_cpp_server_url", defaultCfg.LlamaCppServerURL)
+	v.SetDefault("openai_ocr_base_url", defaultCfg.OpenAIOCRBaseURL)
 	v.SetDefault("ocr_render_dpi", defaultCfg.OCRRenderDPI)
 	v.SetDefault("ocr_concurrency", defaultCfg.OCRConcurrency)
 	v.SetDefault("ocr_timeout", defaultCfg.OCRTimeout)
@@ -201,14 +198,11 @@ func validateConfig(cfg *Config) error {
 
 	// Validate OCR fields if OCR is enabled
 	if cfg.OCREnabled {
-		if cfg.OCRType == "" {
-			return fmt.Errorf("ocr_type is required in config.yaml when ocr_enabled is true")
-		}
 		if cfg.OCRModel == "" {
 			return fmt.Errorf("ocr_model is required in config.yaml when ocr_enabled is true")
 		}
-		if cfg.LlamaCppServerURL == "" && cfg.OCRType == "llama_cpp" {
-			return fmt.Errorf("llama_cpp_server_url is required in config.yaml when ocr_type is llama_cpp")
+		if cfg.OpenAIOCRBaseURL == "" {
+			return fmt.Errorf("openai_ocr_base_url is required in config.yaml when ocr_enabled is true")
 		}
 		if cfg.OCRRenderDPI <= 0 {
 			return fmt.Errorf("ocr_render_dpi must be greater than 0 in config.yaml")

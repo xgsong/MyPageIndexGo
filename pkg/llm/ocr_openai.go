@@ -22,8 +22,8 @@ type OpenAIOCRClient struct {
 // NewOpenAIOCRClient creates a new OCR client from configuration.
 func NewOpenAIOCRClient(cfg *config.Config) *OpenAIOCRClient {
 	clientConfig := openai.DefaultConfig(cfg.OCRAPIKey)
-	if cfg.LlamaCppServerURL != "" {
-		baseURL := cfg.LlamaCppServerURL
+	if cfg.OpenAIOCRBaseURL != "" {
+		baseURL := cfg.OpenAIOCRBaseURL
 		if len(baseURL) > 0 && baseURL[len(baseURL)-1] != '/' {
 			baseURL += "/"
 		}

@@ -18,14 +18,11 @@ openai_model: "Qwen3.5-9B.Q4_K_M"
 # Enable OCR support for scanned PDFs
 ocr_enabled: true
 
-# OCR provider type: currently only "llama_cpp" is supported
-ocr_type: "llama_cpp"
-
 # OCR model name (e.g., GLM-OCR-Q8_0, llava-ocr)
 ocr_model: "GLM-OCR-Q8_0"
 
-# Llama.cpp OCR server URL (required when ocr_type is "llama_cpp")
-llama_cpp_ocr_server_url: "http://localhost:8080/v1"
+# OpenAI-compatible OCR API base URL (required when ocr_enabled is true)
+openai_ocr_base_url: "http://localhost:8080/v1"
 
 # DPI for PDF page rendering to images
 # Higher values produce better OCR accuracy but are slower
