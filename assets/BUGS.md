@@ -14,10 +14,10 @@
 | Severity | Count | Fixed | Unfixed | Fix Rate |
 |----------|-------|-------|---------|----------|
 | 🔴 CRITICAL | 4 | 4 | 0 | **100%** ✅ |
-| 🟠 HIGH | 9 | 8 | 1 | **89%** |
+| 🟠 HIGH | 9 | 7 | 2 | **78%** |
 | 🟡 MEDIUM | 10 | 1 | 9 | **10%** |
 | 🟢 LOW | 5 | 1 | 4 | **20%** |
-| **Total** | **28** | **14** | **14** | **50.0%** |
+| **Total** | **28** | **13** | **15** | **46.4%** |
 
 ### Complete Issue List
 
@@ -26,7 +26,7 @@
 | CR-001 | 🔴 CRITICAL | Concurrency | Data race: `completedBatches` not thread-safe | `generator_summaries.go:153,206` | ✅ **Fixed** |
 | CR-002 | 🔴 CRITICAL | Concurrency | Goroutine loop variable capture (Go <1.22 risk) | `generator_summaries.go:155`, `toc_verify_appearance.go:143` | ✅ **Fixed** |
 | CR-003 | 🔴 CRITICAL | Concurrency | LRU Cache double-locking — dangling reference | `cached_client.go:44-71` | ✅ **Fixed** |
-| CR-004 | 🟠 HIGH | Architecture | File size violation: `main.go` (455 lines) | `cmd/pageindex/main.go` | ✅ **Fixed** |
+| CR-004 | 🟠 HIGH | Architecture | File size violation: `main.go` (455 lines) | `cmd/pageindex/main.go` | ❌ Unfixed |
 | CR-005 | 🟠 HIGH | Architecture | File size violation: `openai.go` (442 lines) | `pkg/llm/openai.go` | ❌ Unfixed |
 | CR-006 | 🟠 HIGH | Architecture | Folder structure violation: `pkg/indexer/` (22 files) | `pkg/indexer/` | ❌ Unfixed |
 | CR-007 | 🟠 HIGH | Code Quality | Duplicate function: `buildContentWithTags` | `toc_detection.go:167`, `meta_processor_helpers.go:115` | ✅ **Fixed** |
@@ -606,32 +606,31 @@ Remove the unused functions. Keep only `tocIndexExtractorPrompt` and `addPhysica
 
 ---
 
-### Phase 3: Code Quality Improvements (P2) — ✅ COMPLETED (2026-03-25)
+### Phase 3: Code Quality Improvements (P2) — 🔄 Partially Completed (2026-03-25)
 
 **Goal:** Reduce code duplication and file sizes
 
 | Issue | Priority | Effort | Impact | Status |
 |-------|----------|--------|--------|--------|
-| CR-004 | P2 | 2 hours | 🟠 Medium - Maintainability | ✅ Fixed |
+| CR-004 | P2 | 2 hours | 🟠 Medium - Maintainability | ❌ Unfixed |
 | CR-005 | P2 | 2 hours | 🟠 Medium - Maintainability | ❌ Unfixed |
 | CR-007 | P2 | 30 min | 🟠 Medium - Duplication | ✅ Fixed |
 | CR-008 | P2 | 1 hour | 🟠 Medium - Maintainability | ✅ Fixed |
 | CR-009 | P2 | 1 hour | 🟠 Medium - Maintainability | ❌ Unfixed |
 
 **Completed Actions:**
-- [x] Extract shared helpers from `main.go` (CR-004)
-  - Created `cmd/pageindex/helpers.go` with 4 helper functions
-  - `loadConfigWithCLI()`: Load config with CLI overrides
-  - `parseDocument()`: Parse PDF/Markdown documents
-  - `createLLMClient()`: Create LLM client with optional caching
-  - `createTimeoutContext()`: Create context with timeout
 - [x] Remove duplicate `buildContentWithTags` (CR-007)
 - [x] Extract `LRUCache` to separate file (CR-008)
   - Created `pkg/llm/lru_cache.go` (~115 lines)
   - Reduced `cached_client.go` from ~268 to ~150 lines
 
+**Attempted but Reverted:**
+- CR-004: Created `cmd/pageindex/helpers.go` but functions were not used
+  - File has been removed
+  - This task remains for future implementation
+
 **Verification:**
-- ✅ Passed: `go test ./pkg/llm/...`
+- ✅ Passed: `go test ./pkg/llm/... ./pkg/indexer/...`
 - ✅ No regression in functionality
 
 ---
@@ -712,11 +711,11 @@ Remove the unused functions. Keep only `tocIndexExtractorPrompt` and `addPhysica
 |-------|--------|-------|-----------|----------|
 | P0 - Critical Correctness | 4 | 4 | 0 | **100%** ✅ |
 | P1 - Dead Code Cleanup | 4 | 4 | 0 | **100%** ✅ |
-| P2 - Code Quality | 5 | 3 | 2 | **60%** |
+| P2 - Code Quality | 5 | 2 | 3 | **40%** |
 | P3 - Architecture | 1 | 0 | 1 | **0%** |
 | P4 - Robustness | 6 | 0 | 6 | **0%** |
 | P5 - Polish | 8 | 0 | 8 | **0%** |
-| **Total** | **28** | **14** | **14** | **50.0%** |
+| **Total** | **28** | **13** | **15** | **46.4%** |
 
 ### Completed Work
 
@@ -743,13 +742,12 @@ Remove the unused functions. Keep only `tocIndexExtractorPrompt` and `addPhysica
 - ✅ Passed `go build ./...`
 - ✅ No compilation errors
 
-#### Phase 3 - Code Quality Improvements (2026-03-25) ✅
+#### Phase 3 - Code Quality Improvements (2026-03-25) 🔄 Partial
 **Improved code organization and reduced duplication:**
-- ✅ CR-004: Extracted common logic from `main.go` to `helpers.go`
-  - 4 helper functions for config loading, document parsing, LLM client creation
 - ✅ CR-007: Removed duplicate `buildContentWithTags` function (9 lines)
 - ✅ CR-008: Extracted `LRUCache` to separate file `lru_cache.go` (~115 lines)
   - Reduced `cached_client.go` from ~268 to ~150 lines
+- ⏸️ CR-004: Attempted but reverted - functions not used
 
 **Verification:**
 - ✅ Passed `go test ./pkg/llm/... ./pkg/indexer/...`
@@ -775,5 +773,5 @@ Remove the unused functions. Keep only `tocIndexExtractorPrompt` and `addPhysica
 ---
 
 **Generated:** 2026-03-25  
-**Last Updated:** 2026-03-25 (Phase 1, 2, 3 Completed)  
+**Last Updated:** 2026-03-25 (Phase 1, 2 Completed; Phase 3 Partial)  
 **Next Review:** After Phase 4 completion
