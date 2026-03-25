@@ -14,10 +14,10 @@
 | Severity | Count | Fixed | Unfixed | Fix Rate |
 |----------|-------|-------|---------|----------|
 | 🔴 CRITICAL | 4 | 4 | 0 | **100%** ✅ |
-| 🟠 HIGH | 9 | 4 | 5 | **44%** |
-| 🟡 MEDIUM | 10 | 0 | 10 | **0%** |
+| 🟠 HIGH | 9 | 6 | 3 | **67%** |
+| 🟡 MEDIUM | 10 | 1 | 9 | **10%** |
 | 🟢 LOW | 5 | 1 | 4 | **20%** |
-| **Total** | **28** | **9** | **19** | **32.1%** |
+| **Total** | **28** | **12** | **16** | **42.9%** |
 
 ### Complete Issue List
 
@@ -29,7 +29,7 @@
 | CR-004 | 🟠 HIGH | Architecture | File size violation: `main.go` (455 lines) | `cmd/pageindex/main.go` | ❌ Unfixed |
 | CR-005 | 🟠 HIGH | Architecture | File size violation: `openai.go` (442 lines) | `pkg/llm/openai.go` | ❌ Unfixed |
 | CR-006 | 🟠 HIGH | Architecture | Folder structure violation: `pkg/indexer/` (22 files) | `pkg/indexer/` | ❌ Unfixed |
-| CR-007 | 🟠 HIGH | Code Quality | Duplicate function: `buildContentWithTags` | `toc_detection.go:167`, `meta_processor_helpers.go:115` | ❌ Unfixed |
+| CR-007 | 🟠 HIGH | Code Quality | Duplicate function: `buildContentWithTags` | `toc_detection.go:167`, `meta_processor_helpers.go:115` | ✅ **Fixed** |
 | CR-008 | 🟠 HIGH | Architecture | File size violation: `cached_client.go` (268 lines) | `pkg/llm/cached_client.go` | ❌ Unfixed |
 | CR-009 | 🟠 HIGH | Architecture | File size violation: `meta_processor_grouping.go` (275 lines) | `pkg/indexer/meta_processor_grouping.go` | ❌ Unfixed |
 | CR-010 | 🟠 HIGH | Dead Code | Dead code: `toc_verifier.go` (236 lines) | `pkg/indexer/toc_verifier.go` | ✅ **Fixed** |
@@ -38,7 +38,7 @@
 | CR-013 | 🟡 MEDIUM | Concurrency | Unbounded goroutines in `CheckAllItemsAppearanceInStart` | `pkg/indexer/toc_verify_appearance.go:139-160` | ❌ Unfixed |
 | CR-014 | 🟡 MEDIUM | Feature | OCR `extractWithOCR` is permanent stub | `pkg/document/pdf.go:170-181` | ❌ Unfixed |
 | CR-015 | 🟡 MEDIUM | Data Integrity | `parseLLMJSONResponse` replaces ALL "None" with "null" | `pkg/indexer/toc_detection.go:116` | ❌ Unfixed |
-| CR-016 | 🟡 MEDIUM | Code Quality | `fmt.Printf` debug output in production code | `pkg/llm/openai.go:178-179` | ❌ Unfixed |
+| CR-016 | 🟡 MEDIUM | Code Quality | `fmt.Printf` debug output in production code | `pkg/llm/openai.go:178-179` | ✅ **Fixed** |
 | CR-017 | 🟡 MEDIUM | Data Integrity | Inconsistent page indexing (0-based vs 1-based) | Multiple files | ❌ Unfixed |
 | CR-018 | 🟡 MEDIUM | Concurrency | Missing context cancellation in concurrent appearance check | `pkg/indexer/toc_verify_appearance.go:139-160` | ❌ Unfixed |
 | CR-019 | 🟡 MEDIUM | Error Handling | Error swallowing in `convertPhysicalIndexToInt` | `pkg/indexer/meta_processor_toc_gen.go:95-96,171-172` | ❌ Unfixed |
