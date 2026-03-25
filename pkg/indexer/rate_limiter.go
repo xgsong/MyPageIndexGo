@@ -8,12 +8,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const (
-	defaultInitialConcurrency = 10
-	defaultMinConcurrency     = 5
-	defaultMaxConcurrency     = 40
-)
-
 type DynamicRateLimiter struct {
 	limiter        *rate.Limiter
 	minConcurrency atomic.Int32

@@ -155,17 +155,14 @@ func TestCachedLLMClient_DifferentInputs_DifferentCache(t *testing.T) {
 	mockClient.On("GenerateStructure", mock.Anything, text1, language.LanguageEnglish).Return(node1, nil).Once()
 	mockClient.On("GenerateStructure", mock.Anything, text2, language.LanguageEnglish).Return(node2, nil).Once()
 
-	// Call with first text
 	result1, err := cachedClient.GenerateStructure(context.Background(), text1, language.LanguageEnglish)
 	assert.NoError(t, err)
 	assert.Equal(t, node1, result1)
 
-	// Call with second text
 	result2, err := cachedClient.GenerateStructure(context.Background(), text2, language.LanguageEnglish)
 	assert.NoError(t, err)
 	assert.Equal(t, node2, result2)
 
-	// Both should be cached
 	result1Again, err := cachedClient.GenerateStructure(context.Background(), text1, language.LanguageEnglish)
 	assert.NoError(t, err)
 	assert.Equal(t, node1, result1Again)
@@ -175,4 +172,69 @@ func TestCachedLLMClient_DifferentInputs_DifferentCache(t *testing.T) {
 	assert.Equal(t, node2, result2Again)
 
 	mockClient.AssertNumberOfCalls(t, "GenerateStructure", 2)
+}
+
+func TestCachedLLMClient_Search_CacheEnabled(t *testing.T) {
+	mockClient := new(MockLLMClient)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, true)
+
+	testQuery := "test query"
+	testTree := document.NewIndexTree(document.NewNode("Root", 1, 10), 10)
+	expectedResult := &document.SearchResult{
+		Query:  testQuery,
+		Answer: "test answer",
+	}
+
+	mockClient.On("Search", mock.Anything, testQuery, mock.Anything).Return(expectedResult, nil).Once()
+
+	result, err := cachedClient.Search(context.Background(), testQuery, testTree)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedResult, result)
+
+	result2, err := cachedClient.Search(context.Background(), testQuery, testTree)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedResult, result2)
+
+	mockClient.AssertNumberOfCalls(t, "Search", 1)
+}
+
+func TestCachedLLMClient_GenerateBatchSummaries_EmptyRequests(t *testing.T) {
+	mockClient := new(MockLLMClient)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, false)
+
+	ctx := context.Background()
+	result, err := cachedClient.GenerateBatchSummaries(ctx, []*BatchSummaryRequest{}, language.LanguageEnglish)
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 0)
+}
+
+func TestCachedLLMClient_GenerateSimple_CacheHit(t *testing.T) {
+	mockClient := new(MockLLMClient)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, false)
+
+	prompt := "test prompt"
+	expectedResponse := "test response"
+
+	mockClient.On("GenerateSimple", mock.Anything, prompt).Return(expectedResponse, nil).Once()
+
+	resp1, err := cachedClient.GenerateSimple(context.Background(), prompt)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedResponse, resp1)
+
+	resp2, err := cachedClient.GenerateSimple(context.Background(), prompt)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedResponse, resp2)
+
+	mockClient.AssertNumberOfCalls(t, "GenerateSimple", 1)
+}
+
+func TestHashText(t *testing.T) {
+	result1 := hashText("prefix", "text")
+	result2 := hashText("prefix", "text")
+	result3 := hashText("prefix", "different")
+
+	assert.Equal(t, result1, result2)
+	assert.NotEqual(t, result1, result3)
+	assert.Len(t, result1, 64)
 }

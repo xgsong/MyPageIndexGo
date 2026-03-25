@@ -22,47 +22,6 @@ func (d *TOCDetector) extractTOCContent(pages []string, tocPageIndices []int) st
 	return transformDotsToColon(content.String())
 }
 
-// extractTOCContentWithLLM uses LLM to extract and clean TOC content
-// Python: extract_toc_content in page_index.py:160-200
-func (d *TOCDetector) extractTOCContentWithLLM(ctx context.Context, rawContent string) (string, error) {
-	prompt := fmt.Sprintf(`请从给定的文本中提取完整的目录内容，将目录中的省略号（...）替换为冒号（:）。
-只返回提取和整理后的目录内容，不要任何其他解释或额外文本。
-
-给定的文本：
-%s`, rawContent)
-
-	response, err := d.llmClient.GenerateSimple(ctx, prompt)
-	if err != nil {
-		return rawContent, err
-	}
-
-	// Check if transformation is complete
-	if d.checkTOCTransformationComplete(ctx, rawContent, response) {
-		return response, nil
-	}
-
-	// Continue generation if incomplete (max 5 retries)
-	const maxAttempts = 5
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		continuePrompt := fmt.Sprintf(`Please continue the generation of table of contents, directly output the remaining part of the structure.
-
-Previous output:
-%s`, response)
-
-		additional, err := d.llmClient.GenerateSimple(ctx, continuePrompt)
-		if err != nil {
-			break
-		}
-		response = response + additional
-
-		if d.checkTOCTransformationComplete(ctx, rawContent, response) {
-			return response, nil
-		}
-	}
-
-	return response, nil
-}
-
 // checkTOCTransformationComplete checks if TOC transformation is complete
 // Python: check_if_toc_transformation_is_complete in page_index.py:143-158
 func (d *TOCDetector) checkTOCTransformationComplete(ctx context.Context, rawContent, transformedContent string) bool {

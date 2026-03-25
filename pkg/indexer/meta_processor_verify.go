@@ -89,7 +89,6 @@ func (mp *MetaProcessor) fixIncorrectTOC(ctx context.Context, items []TOCItem, p
 	}
 
 	// Fix each incorrect item
-	fixed := make([]TOCItem, 0)
 	stillIncorrect := make([]TOCItem, 0)
 
 	for _, item := range incorrectItems {
@@ -98,7 +97,6 @@ func (mp *MetaProcessor) fixIncorrectTOC(ctx context.Context, items []TOCItem, p
 			stillIncorrect = append(stillIncorrect, item)
 			continue
 		}
-		fixed = append(fixed, newItem)
 
 		// Update the item in the main list
 		for i := range items {
