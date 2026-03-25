@@ -38,7 +38,7 @@ ocr_timeout: 60
 # Indexer Configuration
 # -----------------------------------------------------------------------------
 # Maximum concurrent LLM API calls
-max_concurrency: 10
+max_concurrency: 20
 
 # Maximum number of pages per index node
 max_pages_per_node: 10

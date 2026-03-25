@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -36,7 +37,14 @@ Please note: abstract, summary, notation list, figure list, table list, etc. are
 // batchTOCDetectorPrompt creates prompt for batch TOC detection across multiple pages
 func batchTOCDetectorPrompt(pageContents map[int]string) string {
 	var content strings.Builder
-	for pageNum, text := range pageContents {
+	keys := make([]int, 0, len(pageContents))
+	for k := range pageContents {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+
+	for _, pageNum := range keys {
+		text := pageContents[pageNum]
 		truncated := text
 		if len(text) > 2000 {
 			truncated = text[:2000] + "..."
