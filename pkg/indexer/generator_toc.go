@@ -85,7 +85,7 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	items = addPrefaceIfNeeded(items)
 
 	// Python: check_title_appearance_in_start_concurrent (page_index.py:1051)
-	ac := NewAppearanceChecker(g.llmClient)
+	ac := NewAppearanceChecker(g.llmClient, g.cfg)
 	items = ac.CheckAllItemsAppearanceInStart(ctx, items, pageTexts)
 
 	// Convert TOC items to tree structure using Python-equivalent logic
@@ -197,7 +197,7 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context,
 		}
 
 		// Check appear_start for sub-items
-		ac := NewAppearanceChecker(g.llmClient)
+		ac := NewAppearanceChecker(g.llmClient, g.cfg)
 		subItems = ac.CheckAllItemsAppearanceInStart(ctx, subItems, pageTexts)
 
 		// Filter valid items

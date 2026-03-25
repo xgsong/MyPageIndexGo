@@ -36,7 +36,8 @@ func DefaultConfig() *Config {
 		BatchSize:         20,
 		TOCheckPageNum:    20,
 		MaxTokenNumEachNode: 20000,
-		SkipTOCFix:        false,
+		SkipTOCFix:          false,
+		SkipAppearanceCheck: false,
 	}
 }
 
@@ -75,7 +76,8 @@ type Config struct {
 	EnableSearchCache bool   `mapstructure:"enable_search_cache"`// Enable caching for search results
 
 	// Performance Optimization (from config.yaml)
-	SkipTOCFix bool `mapstructure:"skip_toc_fix"` // Skip TOC fix retry to improve performance
+	SkipTOCFix           bool `mapstructure:"skip_toc_fix"`           // Skip TOC fix retry to improve performance
+	SkipAppearanceCheck  bool `mapstructure:"skip_appearance_check"`  // Skip appearance check to improve performance
 
 	// TOC and Content Processing (from config.yaml)
 	MaxTokenNumEachNode int `mapstructure:"max_token_num_each_node"` // Max tokens per node for large node recursion
@@ -129,6 +131,7 @@ func Load() (*Config, error) {
 	v.SetDefault("toc_check_page_num", defaultCfg.TOCheckPageNum)
 	v.SetDefault("max_token_num_each_node", defaultCfg.MaxTokenNumEachNode)
 	v.SetDefault("skip_toc_fix", defaultCfg.SkipTOCFix)
+	v.SetDefault("skip_appearance_check", defaultCfg.SkipAppearanceCheck)
 
 	// Try to read config file
 	if err := v.ReadInConfig(); err != nil {

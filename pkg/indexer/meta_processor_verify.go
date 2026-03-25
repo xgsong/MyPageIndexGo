@@ -31,7 +31,7 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 	}
 
 	// Check all items concurrently using check_title_appearance
-	ac := NewAppearanceChecker(mp.llmClient)
+	ac := NewAppearanceChecker(mp.llmClient, mp.cfg)
 
 	type verifyResult struct {
 		itemIndex int
@@ -204,7 +204,7 @@ Document pages: %s`, incorrectItem.Title, content.String())
 	fixedItem := incorrectItem
 	fixedItem.PhysicalIndex = &idx
 
-	ac := NewAppearanceChecker(mp.llmClient)
+	ac := NewAppearanceChecker(mp.llmClient, mp.cfg)
 	isValid, err := ac.CheckTitleAppearance(ctx, fixedItem, pageTexts, startIndex)
 	if err != nil || !isValid {
 		return incorrectItem, fmt.Errorf("fix verification failed for %s", incorrectItem.Title)
