@@ -42,31 +42,22 @@ func NewLRUCache(maxSize int, ttl time.Duration) *LRUCache {
 }
 
 func (c *LRUCache) Get(key string) (any, bool) {
-	c.mu.RLock()
-	entry, exists := c.entries[key]
-	c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
+	entry, exists := c.entries[key]
 	if !exists {
 		return nil, false
 	}
 
 	if c.ttl > 0 && time.Since(entry.timestamp) > c.ttl {
-		c.mu.Lock()
-		if entry, ok := c.entries[key]; ok {
-			if c.ttl > 0 && time.Since(entry.timestamp) > c.ttl {
-				c.removeEntry(entry)
-				c.mu.Unlock()
-				return nil, false
-			}
-		}
-		c.mu.Unlock()
+		c.removeEntry(entry)
+		return nil, false
 	}
 
-	c.mu.Lock()
 	if entry.element != nil {
 		c.lruList.MoveToFront(entry.element)
 	}
-	c.mu.Unlock()
 
 	return entry.value, true
 }

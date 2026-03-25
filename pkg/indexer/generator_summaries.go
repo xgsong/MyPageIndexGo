@@ -150,9 +150,10 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 		Int("batch_size", batchSize).
 		Msg("Summary batching configuration")
 
-	completedBatches := 0
+	var completedBatches atomic.Int32
 
 	for _, batch := range batches {
+		batch := batch
 		eg.Go(func() error {
 			if err := g.rateLimiter.Wait(ctx); err != nil {
 				return fmt.Errorf("rate limiter wait failed: %w", err)
@@ -203,9 +204,9 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 				nwt.node.Summary = resp.Summary
 			}
 
-			completedBatches++
+			newCount := completedBatches.Add(1)
 			log.Info().
-				Int("completed", completedBatches).
+				Int32("completed", newCount).
 				Int("total", len(batches)).
 				Dur("elapsed", time.Since(startTime)).
 				Msg("Batch summary progress")
