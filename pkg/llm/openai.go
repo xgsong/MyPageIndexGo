@@ -173,10 +173,6 @@ func (c *OpenAIClient) GenerateStructure(ctx context.Context, text string, lang 
 	var node document.Node
 	err = c.jsonCleaner.ParseJSON(content, &node)
 	if err != nil {
-		// Log the raw content for debugging
-		showLen := min(500, len(content))
-		fmt.Printf("DEBUG: Raw LLM response (first %d chars): %q\n", showLen, content[:showLen])
-		fmt.Printf("DEBUG: Total response length: %d\n", len(content))
 		return nil, fmt.Errorf("failed to parse structure json: %w", err)
 	}
 

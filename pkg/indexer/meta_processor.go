@@ -236,7 +236,7 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 	log.Info().Msg("Processing without TOC")
 
 	// Step 1: Wrap pages with physical index tags
-	contentWithTags := mp.buildContentWithTags(pageTexts, startIndex)
+	contentWithTags := buildContentWithTags(pageTexts, startIndex)
 
 	// Step 2: Group pages by token limit
 	groupTexts := mp.splitContentIntoGroups(contentWithTags, mp.cfg.MaxTokensPerNode, mp.cfg.MaxPagesPerNode)

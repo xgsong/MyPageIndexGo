@@ -111,12 +111,3 @@ func (mp *MetaProcessor) calculatePageOffset(pairs []PageIndexPair) *int {
 	}
 	return nil
 }
-
-func (mp *MetaProcessor) buildContentWithTags(pageTexts []string, startIndex int) string {
-	var content strings.Builder
-	for i, text := range pageTexts {
-		pageNum := startIndex + i
-		content.WriteString(addPageTags(text, pageNum))
-	}
-	return content.String()
-}
