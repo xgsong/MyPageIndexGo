@@ -288,17 +288,20 @@ After all optimizations are implemented, PageIndex will be able to:
 - [x] Structured logging
 - [x] 90%+ test coverage
 
-### Phase 2: Enhanced Features (In Progress)
+### Phase 2: Enhanced Features ✅
 - [x] Retry logic with exponential backoff ✅
 - [x] LLM call caching for repeated processing ✅
 - [x] Node ID hash index for faster search ✅
+- [x] Dynamic concurrency control with rate limit adaptation ✅
+- [x] Batch LLM calls for summary generation ✅
+- [x] Index tree serialization optimization ✅
+- [x] Incremental index support ✅
+- [x] Parallel LLM calls in verifyTOC and summary generation ✅
 - [ ] Additional document formats (DOCX, HTML, EPUB)
 - [ ] Multiple LLM provider support (Anthropic, Google, local models)
-- [ ] Dynamic concurrency control with rate limit adaptation
 - [ ] Streaming document processing for large files
 - [ ] Batch document processing
 - [ ] Index versioning and migration
-- [ ] Batch LLM calls for summary generation
 
 ### Phase 3: Storage Backend Adapters (Planned)
 The index storage will be abstracted to support multiple backends:
@@ -568,7 +571,7 @@ mypageindexgo/
 - [x] 结构化日志
 - [x] 90%+ 测试覆盖率
 
-### 第二阶段：增强功能（已完成大部分）
+### 第二阶段：增强功能 ✅
 - [x] 指数退避重试逻辑 ✅
 - [x] LLM 调用缓存，支持重复处理加速 ✅
 - [x] 节点 ID 哈希索引，提升搜索速度 ✅
@@ -576,6 +579,7 @@ mypageindexgo/
 - [x] 摘要生成批量 LLM 调用 ✅
 - [x] 索引树序列化优化，提升读写速度 ✅
 - [x] 增量索引支持，避免全量重新生成 ✅
+- [x] verifyTOC 和摘要生成的并发调用 ✅
 - [ ] 更多文档格式（DOCX、HTML、EPUB）
 - [ ] 多 LLM 提供商支持（Anthropic、Google、本地模型）
 - [ ] 流式文档处理，支持大文件
