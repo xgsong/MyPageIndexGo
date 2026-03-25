@@ -7,12 +7,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// TOCItemWithNodes combines TOC item with its child nodes for tree building
-type TOCItemWithNodes struct {
-	TOCItem
-	Children []TOCItemWithNodes
-}
-
 // mergeTOCItems merges additional TOC items into existing items with deduplication
 // Deduplicates based on structure field OR title, keeping the first occurrence
 func (mp *MetaProcessor) mergeTOCItems(existing, additional []TOCItem) []TOCItem {

@@ -28,7 +28,6 @@ type MetaProcessor struct {
 	llmClient   llm.LLMClient
 	cfg         *config.Config
 	tocDetector *TOCDetector
-	tocVerifier *TOCVerifier
 	docLanguage language.Language // Document language for consistent output
 }
 
@@ -38,7 +37,6 @@ func NewMetaProcessor(client llm.LLMClient, cfg *config.Config, docLanguage lang
 		llmClient:   client,
 		cfg:         cfg,
 		tocDetector: NewTOCDetector(client),
-		tocVerifier: NewTOCVerifier(client),
 		docLanguage: docLanguage,
 	}
 }

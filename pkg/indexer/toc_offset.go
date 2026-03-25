@@ -8,55 +8,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// calculatePageOffset calculates the offset between physical page numbers and logical page numbers
-func calculatePageOffset(toc *TOCResult) (int, error) {
-	if len(toc.Items) == 0 {
-		return 0, nil
-	}
-
-	// Find the first TOC entry with a page number and physical index
-	for _, item := range toc.Items {
-		if item.Page != nil && item.PhysicalIndex != nil {
-			// Calculate offset: physical_index - page_number
-			offset := *item.PhysicalIndex - *item.Page
-			log.Info().
-				Int("physical_index", *item.PhysicalIndex).
-				Int("page_number", *item.Page).
-				Int("offset", offset).
-				Msg("Calculated page offset from first valid TOC entry")
-			return offset, nil
-		}
-	}
-
-	// If no entry with both page and physical index, assume no offset
-	log.Info().Msg("No TOC entry with both page and physical index found, assuming no offset")
-	return 0, nil
-}
-
-// addPageOffsetToTOC adds page offset to TOC items by converting physical_index to logical page numbers
-func addPageOffsetToTOC(toc *TOCResult, offset int) {
-	if len(toc.Items) == 0 {
-		return
-	}
-
-	log.Info().Int("offset", offset).Msg("Adding page offset to TOC")
-
-	for i := range toc.Items {
-		item := &toc.Items[i]
-		if item.PhysicalIndex != nil {
-			// Calculate logical page number: physical_index - offset
-			logicalPage := *item.PhysicalIndex - offset
-			item.Page = &logicalPage
-
-			log.Debug().
-				Str("title", item.Title).
-				Int("physical_index", *item.PhysicalIndex).
-				Int("logical_page", logicalPage).
-				Msg("Mapped physical index to logical page")
-		}
-	}
-}
-
 // tocIndexExtractorPrompt creates prompt for adding physical index to TOC
 func tocIndexExtractorPrompt(toc []TOCItem, content string) string {
 	tocJSON, _ := json.Marshal(toc)

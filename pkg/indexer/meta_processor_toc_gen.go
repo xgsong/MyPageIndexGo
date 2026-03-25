@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/language"
 )
 
@@ -174,54 +173,4 @@ Return ONLY new sections. If all sections are already in Existing TOC, return an
 	}
 
 	return items, nil
-}
-
-// ProcessLargeNodeRecursively processes large nodes recursively
-// Python: process_large_node_recursively in page_index.py:1000-1027
-func (mp *MetaProcessor) ProcessLargeNodeRecursively(ctx context.Context, item *TOCItemWithNodes, pageTexts []string, startIndex int, lang language.Language) {
-	if item == nil {
-		return
-	}
-
-	// Calculate page count
-	startPage := 1
-	if item.PhysicalIndex != nil {
-		startPage = *item.PhysicalIndex
-	}
-	endPage := len(pageTexts)
-
-	pageCount := endPage - startPage + 1
-	if pageCount < 0 {
-		pageCount = 0
-	}
-
-	// Check if node is too large
-	if pageCount > mp.cfg.MaxPagesPerNode {
-		log.Info().
-			Str("title", item.Title).
-			Int("pages", pageCount).
-			Msg("Processing large node recursively")
-
-		// Generate sub-structure for this node
-		subItems, err := mp.processNoTOC(ctx, pageTexts[startPage-1:endPage], startPage)
-		if err == nil && len(subItems) > 0 {
-			// Clear existing children first to avoid duplicates
-			item.Children = nil
-
-			// Check if first item matches current item
-			if len(subItems) > 0 && subItems[0].Title == item.Title {
-				// Remove first item and add rest as children
-				for _, subItem := range subItems[1:] {
-					child := &TOCItemWithNodes{TOCItem: subItem}
-					item.Children = append(item.Children, *child)
-				}
-			} else {
-				// Add all as children
-				for _, subItem := range subItems {
-					child := &TOCItemWithNodes{TOCItem: subItem}
-					item.Children = append(item.Children, *child)
-				}
-			}
-		}
-	}
 }
