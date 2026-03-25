@@ -26,7 +26,6 @@ Given text: %s
 
 return the following JSON format:
 {
-    "thinking": "why do you think there is a table of content in the given text",
     "toc_detected": "yes or no"
 }
 

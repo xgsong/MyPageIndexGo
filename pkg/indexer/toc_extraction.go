@@ -28,7 +28,6 @@ func (d *TOCDetector) checkTOCTransformationComplete(ctx context.Context, rawCon
 	prompt := fmt.Sprintf(`请检查整理后的目录是否完整，包含了原始目录的所有内容。
 请严格按照JSON格式返回结果，不要任何其他内容：
 {
-    "thinking": "解释你认为目录是否完整的原因",
     "completed": "yes或者no"
 }
 
@@ -58,7 +57,6 @@ func (d *TOCDetector) detectPageIndex(ctx context.Context, tocContent string) (b
 	prompt := fmt.Sprintf(`请检查给定的目录中是否包含页码信息。
 请严格按照JSON格式返回结果，不要任何其他内容：
 {
-    "thinking": "解释你认为目录中是否包含页码的原因",
     "page_index_given_in_toc": "yes或者no"
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/rs/zerolog/log"
 )
@@ -32,25 +33,48 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 	// Check all items concurrently using check_title_appearance
 	ac := NewAppearanceChecker(mp.llmClient)
 
-	correctCount := 0
-	var incorrectItems []TOCItem
+	type verifyResult struct {
+		itemIndex int
+		appears   bool
+		item      TOCItem
+	}
+
+	results := make([]verifyResult, 0, len(items))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
 	for i, item := range items {
 		if item.PhysicalIndex == nil {
 			continue
 		}
 
-		item.ListIndex = i
-		appears, err := ac.CheckTitleAppearance(ctx, item, pageTexts, startIndex)
-		if err != nil {
-			log.Warn().Err(err).Str("title", item.Title).Msg("Title appearance check failed")
-			continue
-		}
+		wg.Add(1)
+		go func(idx int, itm TOCItem) {
+			defer wg.Done()
 
-		if appears {
+			itemCopy := itm
+			itemCopy.ListIndex = idx
+			appears, err := ac.CheckTitleAppearance(ctx, itemCopy, pageTexts, startIndex)
+			if err != nil {
+				log.Warn().Err(err).Str("title", itemCopy.Title).Msg("Title appearance check failed")
+				return
+			}
+
+			mu.Lock()
+			results = append(results, verifyResult{itemIndex: idx, appears: appears, item: itemCopy})
+			mu.Unlock()
+		}(i, item)
+	}
+
+	wg.Wait()
+
+	correctCount := 0
+	var incorrectItems []TOCItem
+	for _, r := range results {
+		if r.appears {
 			correctCount++
 		} else {
-			incorrectItems = append(incorrectItems, item)
+			incorrectItems = append(incorrectItems, r.item)
 		}
 	}
 
@@ -152,7 +176,6 @@ The provided pages contains tags like <physical_index_X> and <physical_index_X> 
 
 Reply in a JSON format:
 {
-    "thinking": "explain which page, started and closed by <physical_index_X>, contains the start of this section",
     "physical_index": "<physical_index_X> (keep the format)"
 }
 Directly return the final JSON structure. Do not output anything else.

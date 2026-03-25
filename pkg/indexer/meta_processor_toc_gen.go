@@ -46,22 +46,26 @@ func (mp *MetaProcessor) generateTOCInit(ctx context.Context, content string, st
 Extract a hierarchical tree structure from the given document content.
 
 IMPORTANT REQUIREMENTS:
-1. Use consistent structure numbering: "1", "1.1", "1.2", "2", "2.1", etc. (no leading zeros, no trailing dots)
+1. Structure numbering for Chinese legal documents:
+   - Top-level sections: 1, 2, 3, ... (e.g., "第一条", "第二条", "第三条")
+   - Child of top-level: 1.1, 1.2, ... (e.g., "（一）", "（二）" which are 子条款 of 条)
+   - Sub-sub-level: 1.1.1, 1.1.2, ... (e.g., nested content under 子条款)
+   - CRITICAL: 条(1, 2, 3...) are FLAT siblings - 条 2 is NOT a child of 条 1!
+   - Only （一）（二）... under 条 are children of that 条
 2. Each structure value must be UNIQUE within the document
 3. Start from "1" for the first top-level section
 4. CRITICAL - PAGE NUMBER ACCURACY:
    - The physical_index MUST match the ACTUAL page where the section STARTS in the document
    - Look for <physical_index_X> tags in the content - extract the X value accurately
    - DO NOT guess or make up page numbers - only use page numbers explicitly marked in the content
-   - Child sections (e.g., 1.1, 1.2) must have page numbers WITHIN their parent's range
-   - Sequential sections should have SEQUENTIAL page numbers (no gaps, no overlaps between siblings)
+   - Sequential sections (siblings) should have SEQUENTIAL or NON-OVERLAPPING page numbers
 5. Verify each extracted page number by checking it against the <physical_index_X> tag in the content
 
 Return the result in the following JSON format:
 {
     "table_of_contents": [
         {
-            "structure": "structure index (e.g., 1, 1.1, 1.2)",
+            "structure": "structure index (e.g., 1, 1.1, 2, 2.1)",
             "title": "section title",
             "physical_index": "<physical_index_X>"
         }
@@ -121,17 +125,19 @@ CRITICAL REQUIREMENTS - MUST FOLLOW:
 1. DO NOT return any sections that already exist in the Existing TOC above
 2. DO NOT repeat any structure numbers (e.g., if "7" exists, do NOT return "7" again)
 3. DO NOT repeat any section titles - extract only NEW sections not in Existing TOC
-4. Use consistent structure numbering: "1", "1.1", "1.2", "2", "2.1", etc. (no leading zeros, no trailing dots)
+4. Structure numbering for Chinese legal documents:
+   - Top-level sections: 1, 2, 3, ... (e.g., "第一条", "第二条", "第三条")
+   - Child of top-level: 1.1, 1.2, ... (e.g., "（一）", "（二）" which are 子条款 of 条)
+   - Sub-sub-level: 1.1.1, 1.1.2, ... (e.g., nested content under 子条款)
+   - CRITICAL: 条(1, 2, 3...) are FLAT siblings - 条 2 is NOT a child of 条 1!
+   - Only （一）（二）... under 条 are children of that 条
 5. Continue numbering from where the existing TOC left off
 6. Each structure value must be UNIQUE across the entire document
 7. CRITICAL - PAGE NUMBER ACCURACY:
    - The physical_index MUST match the ACTUAL page where the section STARTS in the document
    - Look for <physical_index_X> tags in the content - extract the X value accurately
    - DO NOT guess or make up page numbers - only use page numbers explicitly marked in the content
-   - Child sections (e.g., 7.1, 7.2) must have page numbers WITHIN their parent's range (e.g., if Chapter 7 is pages 15-17, then 7.1, 7.2 must be within 15-17)
-   - Sequential sections should have SEQUENTIAL page numbers (no gaps, no overlaps between siblings)
-   - The first subsection should start at the parent's start page
-   - The last subsection should end at the parent's end page
+   - Sequential sections (siblings) should have SEQUENTIAL or NON-OVERLAPPING page numbers
 8. Verify each extracted page number by checking it against the <physical_index_X> tag in the content
 
 Return in the following JSON format:

@@ -240,6 +240,7 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 
 	// Step 2: Group pages by token limit
 	groupTexts := mp.splitContentIntoGroups(contentWithTags, mp.cfg.MaxTokensPerNode, mp.cfg.MaxPagesPerNode)
+	log.Info().Int("groups", len(groupTexts)).Msg("Content grouped")
 
 	if len(groupTexts) == 0 {
 		return nil, fmt.Errorf("no content to process")

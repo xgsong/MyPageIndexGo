@@ -32,11 +32,36 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		startPage := *items[i].PhysicalIndex
 
 		if i < len(items)-1 && items[i+1].PhysicalIndex != nil {
-			// Check if next item appears at start (appear_start == "yes")
-			if items[i+1].AppearStart == "yes" {
-				items[i].EndPage = *items[i+1].PhysicalIndex - 1
+			nextPhysicalIndex := *items[i+1].PhysicalIndex
+
+			// Check if next item is a child of current item (has current item's structure as prefix)
+			currentStructure := items[i].Structure
+			nextStructure := items[i+1].Structure
+			isChild := strings.HasPrefix(nextStructure, currentStructure+".")
+
+			// If next item is a child, it shares the same page as parent
+			// If next item is a sibling or unrelated item on the same page, that's a bug
+			if nextPhysicalIndex == startPage && !isChild {
+				// Multiple sibling items on the same page - find the next item on a different page
+				j := i + 1
+				for j < len(items) && *items[j].PhysicalIndex == startPage {
+					j++
+				}
+				// If there's a next item on a different page, use it
+				if j < len(items) {
+					if items[j].AppearStart == "yes" {
+						items[i].EndPage = *items[j].PhysicalIndex - 1
+					} else {
+						items[i].EndPage = *items[j].PhysicalIndex
+					}
+				} else {
+					// No next item on different page, use totalPages
+					items[i].EndPage = totalPages
+				}
+			} else if items[i+1].AppearStart == "yes" {
+				items[i].EndPage = nextPhysicalIndex - 1
 			} else {
-				items[i].EndPage = *items[i+1].PhysicalIndex
+				items[i].EndPage = nextPhysicalIndex
 			}
 		} else {
 			// Last item
@@ -116,15 +141,36 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		return root
 	}
 
-	// If single root node, return it directly
+	// If single root node, ensure its EndPage covers all descendants
 	if len(rootNodes) == 1 {
-		return rootNodes[0]
+		root := rootNodes[0]
+		// Calculate the max end page from all descendants
+		var maxEndPage int
+		var findMaxEndPage func(*document.Node)
+		findMaxEndPage = func(n *document.Node) {
+			if n.EndPage > maxEndPage {
+				maxEndPage = n.EndPage
+			}
+			for _, child := range n.Children {
+				findMaxEndPage(child)
+			}
+		}
+		findMaxEndPage(root)
+		if maxEndPage > root.EndPage {
+			root.EndPage = maxEndPage
+		}
+		return root
 	}
 
 	// Multiple root nodes - create wrapper root
 	root := document.NewNode("Document", 1, totalPages)
 	for _, node := range rootNodes {
 		root.AddChild(node)
+	}
+
+	// Ensure root.EndPage covers all children if it has any
+	if len(root.Children) > 0 && root.EndPage < root.Children[len(root.Children)-1].EndPage {
+		root.EndPage = root.Children[len(root.Children)-1].EndPage
 	}
 
 	return root

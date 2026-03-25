@@ -43,7 +43,6 @@ The given page_text is %s.
 
 Reply format:
 {
-    "thinking": "why do you think the section appears or starts in the page_text",
     "answer": "yes or no"
 }
 Directly return the final JSON structure. Do not output anything else.`, item.Title, pageText)
@@ -78,7 +77,6 @@ The given page_text is %s.
 
 reply format:
 {
-    "thinking": "why do you think the section appears or starts in the page_text",
     "start_begin": "yes or no"
 }
 Directly return the final JSON structure. Do not output anything else.`, title, pageText)

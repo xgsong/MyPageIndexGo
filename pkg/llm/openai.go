@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -370,20 +371,31 @@ func (c *OpenAIClient) GenerateBatchSummaries(ctx context.Context, requests []*B
 
 func (c *OpenAIClient) fallbackToIndividualCalls(ctx context.Context, requests []*BatchSummaryRequest, lang language.Language) []*BatchSummaryResponse {
 	responses := make([]*BatchSummaryResponse, len(requests))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
 	for i, req := range requests {
-		summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
-		if err != nil {
-			responses[i] = &BatchSummaryResponse{
-				NodeID: req.NodeID,
-				Error:  err.Error(),
+		wg.Add(1)
+		go func(idx int, r *BatchSummaryRequest) {
+			defer wg.Done()
+
+			summary, err := c.GenerateSummary(ctx, r.NodeTitle, r.Text, lang)
+			resp := &BatchSummaryResponse{
+				NodeID: r.NodeID,
 			}
-		} else {
-			responses[i] = &BatchSummaryResponse{
-				NodeID:  req.NodeID,
-				Summary: summary,
+			if err != nil {
+				resp.Error = err.Error()
+			} else {
+				resp.Summary = summary
 			}
-		}
+
+			mu.Lock()
+			responses[idx] = resp
+			mu.Unlock()
+		}(i, req)
 	}
+
+	wg.Wait()
 	return responses
 }
 
