@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/language"
 )
 
@@ -45,29 +46,33 @@ func (mp *MetaProcessor) generateTOCInit(ctx context.Context, content string, st
 
 Extract a hierarchical tree structure from the given document content.
 
-IMPORTANT REQUIREMENTS:
-1. Structure numbering for Chinese legal documents:
-   - Top-level sections: 1, 2, 3, ... (e.g., "第一条", "第二条", "第三条")
-   - Child of top-level: 1.1, 1.2, ... (e.g., "（一）", "（二）" which are 子条款 of 条)
-   - Sub-sub-level: 1.1.1, 1.1.2, ... (e.g., nested content under 子条款)
-   - CRITICAL: 条(1, 2, 3...) are FLAT siblings - 条 2 is NOT a child of 条 1!
-   - Only （一）（二）... under 条 are children of that 条
-2. Each structure value must be UNIQUE within the document
-3. Start from "1" for the first top-level section
-4. CRITICAL - PAGE NUMBER ACCURACY:
-   - The physical_index MUST match the ACTUAL page where the section STARTS in the document
-   - Look for <physical_index_X> tags in the content - extract the X value accurately
-   - DO NOT guess or make up page numbers - only use page numbers explicitly marked in the content
-   - Sequential sections (siblings) should have SEQUENTIAL or NON-OVERLAPPING page numbers
-5. Verify each extracted page number by checking it against the <physical_index_X> tag in the content
+CRITICAL PAGE NUMBER EXTRACTION:
+The document has pages marked with 【第X页开始】 and 【第X页结束】 tags.
+Each section between these tags represents page X of the PDF.
 
-Return the result in the following JSON format:
+For example:
+【第1页开始】
+content of page 1...
+【第1页结束】
+
+IMPORTANT RULES:
+1. When "第一章" appears between 【第1页开始】 and 【第1页结束】, its page number is 1
+2. When "第二章" appears between 【第3页开始】 and 【第3页结束】, its page number is 3
+3. The page numbers may not be sequential - always look at the ACTUAL tag numbers
+4. DO NOT guess page numbers - use the tag numbers exactly
+
+DOCUMENT STRUCTURE:
+- Top-level sections: 1, 2, 3, ... (e.g., "第一章", "第二章")
+- Child sections: 1.1, 1.2, ... (e.g., "1.1", "1.2")
+- Top-level sections are FLAT siblings
+
+Return JSON:
 {
     "table_of_contents": [
         {
-            "structure": "structure index (e.g., 1, 1.1, 2, 2.1)",
-            "title": "section title",
-            "physical_index": "<physical_index_X>"
+            "structure": "1",
+            "title": "第一章...",
+            "physical_index": "1"
         }
     ]
 }
@@ -80,6 +85,8 @@ Document content:
 		return nil, err
 	}
 
+	log.Info().Str("response", response).Msg("LLM response for generateTOCInit")
+
 	var result TOCTransformerResult
 	if err := parseLLMJSONResponse(response, &result); err != nil {
 		return nil, err
@@ -88,15 +95,22 @@ Document content:
 	items := make([]TOCItem, len(result.TableOfContents))
 	for i, entry := range result.TableOfContents {
 		items[i] = TOCItem{
-			Structure: normalizeStructure(entry.Structure),
-			Title:     entry.Title,
-			ListIndex: i,
+			Structure:   normalizeStructure(entry.Structure),
+			Title:       entry.Title,
+			ListIndex:   i,
+			AppearStart: "yes",
 		}
 		// Convert interface{} to string first
 		physicalIndexStr := result.GetPhysicalIndexAsString(i)
 		if physicalIndexStr != "" {
-			idx, _ := convertPhysicalIndexToInt(physicalIndexStr)
-			items[i].PhysicalIndex = &idx
+			idx, err := convertPhysicalIndexToInt(physicalIndexStr)
+			if err != nil {
+				log.Warn().Int("item", i).Str("physical_index", physicalIndexStr).Err(err).Msg("Failed to parse physical_index, skipping")
+				continue
+			}
+			if idx > 0 {
+				items[i].PhysicalIndex = &idx
+			}
 		}
 	}
 

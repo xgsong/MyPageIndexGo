@@ -46,7 +46,7 @@ func TestTransformDotsToColon(t *testing.T) {
 func TestAddPageTags(t *testing.T) {
 	content := "This is page content"
 	result := addPageTags(content, 5)
-	expected := "<physical_index_5>\nThis is page content\n<physical_index_5>\n\n"
+	expected := "【第5页开始】\nThis is page content\n【第5页结束】\n\n"
 	assert.Equal(t, expected, result)
 }
 
@@ -54,11 +54,11 @@ func TestBuildContentWithTags(t *testing.T) {
 	pages := []string{"Page 1 content", "Page 2 content", "Page 3 content"}
 	result := buildContentWithTags(pages, 1)
 
-	assert.Contains(t, result, "<physical_index_1>")
+	assert.Contains(t, result, "【第1页开始】")
 	assert.Contains(t, result, "Page 1 content")
-	assert.Contains(t, result, "<physical_index_2>")
+	assert.Contains(t, result, "【第2页开始】")
 	assert.Contains(t, result, "Page 2 content")
-	assert.Contains(t, result, "<physical_index_3>")
+	assert.Contains(t, result, "【第3页开始】")
 	assert.Contains(t, result, "Page 3 content")
 }
 
@@ -66,8 +66,8 @@ func TestBuildContentWithTags_StartingIndex(t *testing.T) {
 	pages := []string{"Page 5 content", "Page 6 content"}
 	result := buildContentWithTags(pages, 5)
 
-	assert.Contains(t, result, "<physical_index_5>")
-	assert.Contains(t, result, "<physical_index_6>")
+	assert.Contains(t, result, "【第5页开始】")
+	assert.Contains(t, result, "【第6页开始】")
 }
 
 func TestConvertPhysicalIndexToInt(t *testing.T) {
@@ -81,6 +81,8 @@ func TestConvertPhysicalIndexToInt(t *testing.T) {
 		{"without brackets", "physical_index_5", 5, false},
 		{"with whitespace", "  <physical_index_10>  ", 10, false},
 		{"plain number", "42", 42, false},
+		{"Chinese format", "【第7页开始】", 7, false},
+		{"Chinese format end", "【第8页结束】", 8, false},
 		{"invalid format", "invalid", 0, true},
 	}
 
@@ -178,12 +180,13 @@ func TestSamplePages(t *testing.T) {
 
 	result := mp.samplePages(pages, 2, 3)
 
-	assert.Contains(t, result, "<physical_index_2>")
+	assert.Contains(t, result, "【第2页开始】")
 	assert.Contains(t, result, "Page 2")
-	assert.Contains(t, result, "<physical_index_3>")
+	assert.Contains(t, result, "【第3页开始】")
 	assert.Contains(t, result, "Page 3")
-	assert.Contains(t, result, "<physical_index_4>")
+	assert.Contains(t, result, "【第4页开始】")
 	assert.Contains(t, result, "Page 4")
+	assert.Contains(t, result, "【第5页开始】")
 	assert.Contains(t, result, "Page 5")
 }
 

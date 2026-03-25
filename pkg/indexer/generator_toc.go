@@ -191,7 +191,7 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context,
 		subPageTexts := pageTexts[startIdx:endIdx]
 
 		// Generate sub-structure
-		subItems, err := mp.processNoTOC(ctx, subPageTexts, node.StartPage)
+		subItems, err := mp.processNoTOC(ctx, subPageTexts, node.StartPage, nil, false)
 		if err != nil || len(subItems) == 0 {
 			return
 		}

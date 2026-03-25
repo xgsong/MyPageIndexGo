@@ -86,4 +86,4 @@ enable_search_cache: false
 # Logging Configuration
 # -----------------------------------------------------------------------------
 # Log level: debug, info, warn, error
-log_level: 'info'
+log_level: 'debug'

@@ -83,7 +83,6 @@ func (mp *MetaProcessor) pageListToGroupText(pageTexts []string, startIndex int)
 }
 
 func (mp *MetaProcessor) splitContentIntoGroups(content string, maxTokens int, overlapPages int) []string {
-	// Simple splitting by token estimate (approx 4 chars per token)
 	maxChars := maxTokens * 4
 	groups := make([]string, 0)
 
@@ -93,16 +92,9 @@ func (mp *MetaProcessor) splitContentIntoGroups(content string, maxTokens int, o
 			break
 		}
 
-		// Find a good break point
 		breakPoint := maxChars
 		if breakPoint < len(content) {
-			// Try to break at newline
-			for i := breakPoint; i > breakPoint/2; i-- {
-				if content[i] == '\n' {
-					breakPoint = i
-					break
-				}
-			}
+			breakPoint = findValidBreakPoint(content, maxChars)
 		}
 
 		groups = append(groups, content[:breakPoint])
@@ -110,6 +102,36 @@ func (mp *MetaProcessor) splitContentIntoGroups(content string, maxTokens int, o
 	}
 
 	return groups
+}
+
+func findValidBreakPoint(content string, maxChars int) int {
+	breakPoint := maxChars
+	if breakPoint >= len(content) {
+		return len(content)
+	}
+
+	for i := breakPoint; i > breakPoint/2 && i > 0; i-- {
+		if content[i] == '\n' {
+			return i + 1
+		}
+	}
+
+	for i := breakPoint; i < len(content) && i < maxChars+100; i++ {
+		if content[i] == '>' {
+			nextI := i + 1
+			if nextI < len(content) && (content[nextI] == '\n' || content[nextI] == ' ' || content[nextI] == '<') {
+				return i + 1
+			}
+		}
+	}
+
+	for i := breakPoint - 1; i >= breakPoint/2; i-- {
+		if content[i] == '>' {
+			return i + 1
+		}
+	}
+
+	return breakPoint
 }
 
 // addPageNumberToTOC uses LLM to find where each TOC section appears in the content.

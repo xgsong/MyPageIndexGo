@@ -101,7 +101,7 @@ func parseLLMJSONResponse(response string, target interface{}) error {
 
 	// Remove all leading non-JSON characters (BOM, control characters, etc.)
 	content = strings.TrimFunc(content, func(r rune) bool {
-		return r < ' ' || r == '\ufeff' || r == 'ï' || r == '»' || r == '¿' || r == 'p' || r == 'n' || r == 't'
+		return r < ' ' || r == '\ufeff' || r == 'ï' || r == '»' || r == '¿'
 	})
 
 	// Remove markdown code blocks
@@ -198,7 +198,7 @@ func parseLLMJSONResponse(response string, target interface{}) error {
 
 // addPageTags wraps content with physical index tags
 func addPageTags(content string, pageIndex int) string {
-	return fmt.Sprintf("<physical_index_%d>\n%s\n<physical_index_%d>\n\n",
+	return fmt.Sprintf("【第%d页开始】\n%s\n【第%d页结束】\n\n",
 		pageIndex, content, pageIndex)
 }
 
@@ -212,10 +212,21 @@ func buildContentWithTags(pages []string, startIndex int) string {
 	return content.String()
 }
 
-// convertPhysicalIndexToInt converts "<physical_index_5>" to 5
+// convertPhysicalIndexToInt converts various formats to int
+// Supports: "<physical_index_5>", "physical_index_5", "5", "【第5页开始】"
 func convertPhysicalIndexToInt(physicalIndex string) (int, error) {
 	physicalIndex = strings.TrimSpace(physicalIndex)
 
+	// Try to extract number from Chinese format 【第X页开始】
+	if strings.Contains(physicalIndex, "第") && strings.Contains(physicalIndex, "页") {
+		re := regexp.MustCompile(`第(\d+)页`)
+		matches := re.FindStringSubmatch(physicalIndex)
+		if len(matches) >= 2 {
+			return strconv.Atoi(matches[1])
+		}
+	}
+
+	// Try standard <physical_index_X> format
 	if strings.HasPrefix(physicalIndex, "<physical_index_") {
 		physicalIndex = strings.TrimPrefix(physicalIndex, "<physical_index_")
 		physicalIndex = strings.TrimSuffix(physicalIndex, ">")
@@ -284,46 +295,9 @@ func (d *TOCDetector) detectTOCPagesBatch(ctx context.Context, pages []string, s
 // findTOCPages scans pages to find TOC pages starting from startPageIndex.
 // Python: find_toc_pages in page_index.py:341-366
 // Only stops at maxPages if not currently finding consecutive TOC pages.
-// OPTIMIZED: Uses batch detection to reduce LLM calls from N (pages) to N/batchSize
-// FALLBACK: If batch detection fails or returns no results, falls back to per-page detection
+// Uses per-page detection for reliability.
 func (d *TOCDetector) findTOCPages(ctx context.Context, pages []string, maxPages int, startPageIndex int) ([]int, error) {
-	const batchSize = 5
-
-	var tocPages []int
-	lastPageWasTOC := false
-	endPage := min(len(pages), maxPages)
-	allBatchesProcessed := true
-
-	for batchStart := startPageIndex; batchStart < endPage; {
-		batchEnd := min(batchStart+batchSize, endPage)
-
-		batchTOCPages, err := d.detectTOCPagesBatch(ctx, pages, batchStart, batchEnd)
-		if err != nil {
-			log.Warn().Err(err).Int("batch_start", batchStart).Msg("Batch TOC detection failed, falling back to per-page")
-			return d.findTOCPagesPerPage(ctx, pages, maxPages, startPageIndex)
-		}
-
-		if len(batchTOCPages) > 0 {
-			for _, pageIdx := range batchTOCPages {
-				log.Info().Int("page", pageIdx).Msg("Page has TOC (batch)")
-				tocPages = append(tocPages, pageIdx)
-				lastPageWasTOC = true
-			}
-		} else if lastPageWasTOC {
-			log.Info().Int("page", batchStart-1).Msg("Found last TOC page")
-			break
-		}
-
-		batchStart = batchEnd
-	}
-
-	// If no TOC found after all batches, fall back to per-page detection
-	if len(tocPages) == 0 && allBatchesProcessed {
-		log.Info().Msg("Batch detection completed but found no TOC, falling back to per-page detection")
-		return d.findTOCPagesPerPage(ctx, pages, maxPages, startPageIndex)
-	}
-
-	return tocPages, nil
+	return d.findTOCPagesPerPage(ctx, pages, maxPages, startPageIndex)
 }
 
 // findTOCPagesPerPage performs per-page TOC detection (original implementation)
@@ -376,48 +350,6 @@ func (d *TOCDetector) CheckTOC(ctx context.Context, pages []string, tocCheckPage
 
 	log.Info().Msg("TOC found")
 	tocContent := d.extractTOCContent(pages, tocPages)
-	hasPageIndex, err := d.detectPageIndex(ctx, tocContent)
-	if err != nil {
-		return nil, err
-	}
-
-	if hasPageIndex {
-		log.Info().Msg("Page index found in TOC")
-		return &TOCResult{
-			TOCContent:     tocContent,
-			TOCPageList:    tocPages,
-			PageIndexGiven: true,
-			Items:          []TOCItem{},
-		}, nil
-	}
-
-	// Python: when first TOC has no page index, continue searching for another TOC
-	// that might have page index (page_index.py:709-732)
-	currentStartIndex := tocPages[len(tocPages)-1] + 1
-	for !hasPageIndex && currentStartIndex < len(pages) && currentStartIndex < tocCheckPageNum {
-		additionalTOCPages, err := d.findTOCPages(ctx, pages, tocCheckPageNum, currentStartIndex)
-		if err != nil || len(additionalTOCPages) == 0 {
-			break
-		}
-
-		additionalTOCContent := d.extractTOCContent(pages, additionalTOCPages)
-		additionalHasPageIndex, err := d.detectPageIndex(ctx, additionalTOCContent)
-		if err != nil {
-			break
-		}
-
-		if additionalHasPageIndex {
-			log.Info().Msg("Page index found in additional TOC")
-			return &TOCResult{
-				TOCContent:     additionalTOCContent,
-				TOCPageList:    additionalTOCPages,
-				PageIndexGiven: true,
-				Items:          []TOCItem{},
-			}, nil
-		}
-
-		currentStartIndex = additionalTOCPages[len(additionalTOCPages)-1] + 1
-	}
 
 	log.Info().Msg("Page index not found in any TOC")
 	return &TOCResult{

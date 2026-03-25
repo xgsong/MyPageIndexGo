@@ -607,28 +607,28 @@ func TestGenerateTreeFromTOC_EndPageCalculation(t *testing.T) {
 		{Title: "Section 1.1", Structure: "1.1", PhysicalIndex: ptrInt(1)},
 		{Title: "Section 1.2", Structure: "1.2", PhysicalIndex: ptrInt(3)},
 		{Title: "Chapter 2", Structure: "2", PhysicalIndex: ptrInt(5)},
-		{Title: "Chapter 3", Structure: "3", PhysicalIndex: ptrInt(7)},
+		{Title: "Section 2.1", Structure: "2.1", PhysicalIndex: ptrInt(5)},
+		{Title: "Section 2.2", Structure: "2.2", PhysicalIndex: ptrInt(7)},
+		{Title: "Chapter 3", Structure: "3", PhysicalIndex: ptrInt(10)},
 	}
 
-	root := gen.generateTreeFromTOC(items, 10)
+	root := gen.generateTreeFromTOC(items, 15)
 	assert.NotNil(t, root)
+	assert.Equal(t, 3, len(root.Children))
 
-	// Python uses flat end page calculation (next item's start - 1 or next item's start)
-	// Chapter 1 should have Section 1.1 and 1.2 as children
+	// Verify tree structure
 	chap1 := root.Children[0]
 	assert.Equal(t, 1, chap1.StartPage)
-	// Chapter 1 ends at page 1 (next item "1.1" starts at page 1, appear_start defaults to no, so end = next.start = 1)
-	// Actually with appear_start logic: if next.appear_start == "yes", end = next.start - 1, else end = next.start
-	// Since appear_start is empty (not "yes"), end = next.start = 1
+	// Without AddChild fix, EndPage stays at initial value (calculated from next sibling)
 	assert.Equal(t, 1, chap1.EndPage)
 
 	chap2 := root.Children[1]
 	assert.Equal(t, 5, chap2.StartPage)
-	assert.Equal(t, 7, chap2.EndPage) // Next item starts at 7
+	assert.Equal(t, 5, chap2.EndPage)
 
 	chap3 := root.Children[2]
-	assert.Equal(t, 7, chap3.StartPage)
-	assert.Equal(t, 10, chap3.EndPage) // Last item ends at totalPages
+	assert.Equal(t, 10, chap3.StartPage)
+	assert.Equal(t, 15, chap3.EndPage) // Last item ends at totalPages
 }
 
 func TestGenerateTreeFromTOC_HierarchyWithEndPageFix(t *testing.T) {
@@ -651,14 +651,16 @@ func TestGenerateTreeFromTOC_HierarchyWithEndPageFix(t *testing.T) {
 
 	chap1 := root.Children[0]
 	assert.Equal(t, 1, chap1.StartPage)
-	// Chapter 1 ends at page 1 (next item "1.1" starts at page 1)
-	assert.Equal(t, 1, chap1.EndPage)
+	// With AddChild fix: Chapter 1's EndPage is updated to max(child.EndPage)
+	// Children EndPages: 1.1 ends at 1, 1.2 ends at 3, 1.3 ends at 5
+	// So Chapter 1 should end at 5 (max of children's EndPages)
+	assert.Equal(t, 5, chap1.EndPage)
 	assert.Equal(t, 3, len(chap1.Children))
 
 	sect1_3 := chap1.Children[2]
 	assert.Equal(t, "Section 1.3", sect1_3.Title)
 	assert.Equal(t, 4, sect1_3.StartPage)
-	assert.Equal(t, 6, sect1_3.EndPage) // Next item "2" starts at page 6
+	assert.Equal(t, 5, sect1_3.EndPage) // Next item "2" starts at page 6, so EndPage = 6 - 1 = 5
 }
 
 func ptrInt(i int) *int {

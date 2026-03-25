@@ -63,7 +63,7 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 			return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
 		}
 	case ModeNoTOC:
-		result, err = mp.processNoTOC(ctx, pageTexts, startIndex)
+		result, err = mp.processNoTOC(ctx, pageTexts, startIndex, tocPageList, false)
 		if err != nil {
 			log.Warn().Err(err).Msg("No TOC processing failed, returning simple flat structure")
 			// Fallback to simplest possible structure: one item per page
@@ -235,13 +235,66 @@ func (mp *MetaProcessor) generateSimpleFlatStructure(pageTexts []string, startIn
 
 // processNoTOC generates structure without TOC
 // Python: process_no_toc in page_index.py:576-595
-func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, startIndex int) ([]TOCItem, error) {
+func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, startIndex int, tocPageList []int, pageIndexGiven bool) ([]TOCItem, error) {
 	log.Info().Msg("Processing without TOC")
 
-	// Step 1: Wrap pages with physical index tags
-	contentWithTags := buildContentWithTags(pageTexts, startIndex)
+	// Only skip TOC pages if we have high confidence they are real TOC pages with page numbers
+	// If PageIndexGiven is false, the detected "TOC pages" are likely false positives
+	// and should not be skipped
+	if pageIndexGiven && len(tocPageList) > 0 {
+		skipPages := make(map[int]bool)
+		for _, p := range tocPageList {
+			if p >= 0 && p < len(pageTexts) {
+				skipPages[p] = true
+			}
+		}
 
-	// Step 2: Group pages by token limit
+		filteredTexts := make([]string, 0, len(pageTexts))
+		actualStartIndex := startIndex
+		adjustedStart := startIndex
+		for i, text := range pageTexts {
+			pageNum := startIndex + i
+			if skipPages[pageNum] {
+				continue
+			}
+			filteredTexts = append(filteredTexts, text)
+			if adjustedStart == startIndex && len(filteredTexts) == 1 {
+				actualStartIndex = pageNum
+			}
+		}
+		if len(filteredTexts) == 0 {
+			filteredTexts = pageTexts
+			actualStartIndex = startIndex
+		}
+		log.Info().Int("skipped_pages", len(skipPages)).Int("actual_start", actualStartIndex).Msg("Skipped TOC pages")
+
+		contentWithTags := buildContentWithTags(filteredTexts, actualStartIndex)
+		groupTexts := mp.splitContentIntoGroups(contentWithTags, mp.cfg.MaxTokensPerNode, mp.cfg.MaxPagesPerNode)
+		log.Info().Int("groups", len(groupTexts)).Msg("Content grouped")
+
+		if len(groupTexts) == 0 {
+			return nil, fmt.Errorf("no content to process")
+		}
+
+		tocItems, err := mp.generateTOCInit(ctx, groupTexts[0], actualStartIndex, mp.docLanguage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate initial TOC: %w", err)
+		}
+
+		for i, groupText := range groupTexts[1:] {
+			additional, err := mp.generateTOCContinue(ctx, tocItems, groupText, actualStartIndex, mp.docLanguage)
+			if err != nil {
+				log.Warn().Err(err).Int("group", i+1).Msg("Failed to continue TOC generation")
+				continue
+			}
+			tocItems = mp.mergeTOCItems(tocItems, additional)
+		}
+
+		return tocItems, nil
+	}
+
+	// No confident TOC found, process all pages
+	contentWithTags := buildContentWithTags(pageTexts, startIndex)
 	groupTexts := mp.splitContentIntoGroups(contentWithTags, mp.cfg.MaxTokensPerNode, mp.cfg.MaxPagesPerNode)
 	log.Info().Int("groups", len(groupTexts)).Msg("Content grouped")
 
@@ -249,20 +302,17 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 		return nil, fmt.Errorf("no content to process")
 	}
 
-	// Step 3: Generate initial TOC from first group
 	tocItems, err := mp.generateTOCInit(ctx, groupTexts[0], startIndex, mp.docLanguage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate initial TOC: %w", err)
 	}
 
-	// Step 4: Continue TOC generation for remaining groups
 	for i, groupText := range groupTexts[1:] {
 		additional, err := mp.generateTOCContinue(ctx, tocItems, groupText, startIndex, mp.docLanguage)
 		if err != nil {
 			log.Warn().Err(err).Int("group", i+1).Msg("Failed to continue TOC generation")
 			continue
 		}
-		// Deduplicate additional items before merging
 		tocItems = mp.mergeTOCItems(tocItems, additional)
 	}
 

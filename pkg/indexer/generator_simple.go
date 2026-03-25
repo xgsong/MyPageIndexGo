@@ -34,7 +34,10 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		if i < len(items)-1 && items[i+1].PhysicalIndex != nil {
 			nextPhysicalIndex := *items[i+1].PhysicalIndex
 
-			// Check if next item is a child of current item (has current item's structure as prefix)
+			// Check if next item is a child of current item
+			// Child means: nextStructure starts with currentStructure + "."
+			// Examples: "1" is parent of "1.1", "1.1" is parent of "1.1.1"
+			// But "1" is NOT a child of "1.1" (reverse is true)
 			currentStructure := items[i].Structure
 			nextStructure := items[i+1].Structure
 			isChild := strings.HasPrefix(nextStructure, currentStructure+".")

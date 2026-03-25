@@ -32,6 +32,9 @@ func NewNode(title string, startPage, endPage int) *Node {
 // AddChild adds a child node to this node.
 func (n *Node) AddChild(child *Node) {
 	n.Children = append(n.Children, child)
+	if child.EndPage > n.EndPage {
+		n.EndPage = child.EndPage
+	}
 }
 
 // CountNodes returns the total number of nodes in the subtree rooted at this node.
