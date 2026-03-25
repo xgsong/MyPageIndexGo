@@ -24,7 +24,7 @@ func DefaultConfig() *Config {
 		OCRRenderDPI:      150,
 		OCRConcurrency:    5,
 		OCRTimeout:        60,
-		MaxConcurrency:    10,
+		MaxConcurrency:    20,
 		MaxPagesPerNode:   10,
 		MaxTokensPerNode:  24000,
 		GenerateSummaries: false,
@@ -36,6 +36,7 @@ func DefaultConfig() *Config {
 		BatchSize:         20,
 		TOCheckPageNum:    20,
 		MaxTokenNumEachNode: 20000,
+		SkipTOCFix:        false,
 	}
 }
 
@@ -72,6 +73,9 @@ type Config struct {
 	EnableLLMCache    bool   `mapstructure:"enable_llm_cache"`
 	LLMCacheTTL       int    `mapstructure:"llm_cache_ttl"`      // TTL in seconds, 0 means no expiration
 	EnableSearchCache bool   `mapstructure:"enable_search_cache"`// Enable caching for search results
+
+	// Performance Optimization (from config.yaml)
+	SkipTOCFix bool `mapstructure:"skip_toc_fix"` // Skip TOC fix retry to improve performance
 
 	// TOC and Content Processing (from config.yaml)
 	MaxTokenNumEachNode int `mapstructure:"max_token_num_each_node"` // Max tokens per node for large node recursion
@@ -124,6 +128,7 @@ func Load() (*Config, error) {
 	v.SetDefault("batch_size", defaultCfg.BatchSize)
 	v.SetDefault("toc_check_page_num", defaultCfg.TOCheckPageNum)
 	v.SetDefault("max_token_num_each_node", defaultCfg.MaxTokenNumEachNode)
+	v.SetDefault("skip_toc_fix", defaultCfg.SkipTOCFix)
 
 	// Try to read config file
 	if err := v.ReadInConfig(); err != nil {

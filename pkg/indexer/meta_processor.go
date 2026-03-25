@@ -103,12 +103,15 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 	}
 
 	if accuracy > 0.6 && len(incorrectResults) > 0 {
-		// Try to fix incorrect items
-		fixedResult, _, err := mp.fixIncorrectTOCWithRetries(ctx, result, pageTexts, incorrectResults, startIndex, 3)
-		if err == nil {
-			return fixedResult, nil
+		if mp.cfg.SkipTOCFix {
+			log.Info().Msg("Skipping TOC fix (SkipTOCFix=true)")
+		} else {
+			fixedResult, _, err := mp.fixIncorrectTOCWithRetries(ctx, result, pageTexts, incorrectResults, startIndex, 3)
+			if err == nil {
+				return fixedResult, nil
+			}
+			log.Warn().Err(err).Msg("Failed to fix incorrect TOC")
 		}
-		log.Warn().Err(err).Msg("Failed to fix incorrect TOC")
 		return result, nil
 	}
 

@@ -42,7 +42,7 @@ log_level: debug
 
 	// Config file values should be used for non-sensitive config
 	assert.Equal(t, "gpt-4", cfg.OpenAIModel)
-	assert.Equal(t, 10, cfg.MaxConcurrency)
+	assert.Equal(t, 10, cfg.MaxConcurrency) // From config.yaml
 	assert.Equal(t, "debug", cfg.LogLevel)
 	// Sensitive config from environment
 	assert.Equal(t, "test-key-from-env", cfg.OpenAIAPIKey)
@@ -95,7 +95,7 @@ func TestDefaultConfig_Values(t *testing.T) {
 	cfg := DefaultConfig()
 
 	assert.Equal(t, "gpt-4o", cfg.OpenAIModel)
-	assert.Equal(t, 10, cfg.MaxConcurrency)
+	assert.Equal(t, 20, cfg.MaxConcurrency)
 	assert.Equal(t, 10, cfg.MaxPagesPerNode)
 	assert.Equal(t, 24000, cfg.MaxTokensPerNode)
 	assert.False(t, cfg.GenerateSummaries)

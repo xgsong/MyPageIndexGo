@@ -12,7 +12,7 @@ func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
 	assert.Equal(t, "gpt-4o", cfg.OpenAIModel)
-	assert.Equal(t, 10, cfg.MaxConcurrency) // Optimized from 5
+	assert.Equal(t, 20, cfg.MaxConcurrency) // Optimized from 10
 	assert.Equal(t, 10, cfg.MaxPagesPerNode)
 	assert.Equal(t, 24000, cfg.MaxTokensPerNode) // Optimized from 16000
 	assert.Equal(t, false, cfg.GenerateSummaries)
@@ -38,7 +38,7 @@ func TestLoadFromEnv(t *testing.T) {
 	assert.Equal(t, "test-key-123", cfg.OpenAIAPIKey)
 	// Non-sensitive config must come from config.yaml, not environment variables
 	assert.Equal(t, "gpt-4o", cfg.OpenAIModel)
-	assert.Equal(t, 10, cfg.MaxConcurrency)
+	assert.Equal(t, 20, cfg.MaxConcurrency)
 }
 
 func TestLoadFromEnv_RequiresAPIKey(t *testing.T) {
@@ -78,7 +78,7 @@ func TestLoadFromEnv_NonPrefixed(t *testing.T) {
 	assert.Equal(t, "test-ocr-key", cfg.OCRAPIKey)
 	// Non-sensitive config must come from config.yaml
 	assert.Equal(t, "gpt-4o", cfg.OpenAIModel)
-	assert.Equal(t, 10, cfg.MaxConcurrency)
+	assert.Equal(t, 20, cfg.MaxConcurrency)
 }
 
 func TestLoadFromEnv_SensitiveOnly(t *testing.T) {
@@ -97,6 +97,6 @@ func TestLoadFromEnv_SensitiveOnly(t *testing.T) {
 	assert.Equal(t, "test-key-sensitive", cfg.OpenAIAPIKey)
 	// These should have default values from config.yaml, not environment
 	assert.Equal(t, "gpt-4o", cfg.OpenAIModel)
-	assert.Equal(t, 10, cfg.MaxConcurrency)
+	assert.Equal(t, 20, cfg.MaxConcurrency)
 	assert.Equal(t, "info", cfg.LogLevel)
 }
