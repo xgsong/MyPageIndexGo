@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -34,44 +33,7 @@ Directly return the final JSON structure. Do not output anything else.
 Please note: abstract, summary, notation list, figure list, table list, etc. are not table of contents.`, content)
 }
 
-// batchTOCDetectorPrompt creates prompt for batch TOC detection across multiple pages
-func batchTOCDetectorPrompt(pageContents map[int]string) string {
-	var content strings.Builder
-	keys := make([]int, 0, len(pageContents))
-	for k := range pageContents {
-		keys = append(keys, k)
-	}
-	sort.Ints(keys)
 
-	for _, pageNum := range keys {
-		text := pageContents[pageNum]
-		truncated := text
-		if len(text) > 2000 {
-			truncated = text[:2000] + "..."
-		}
-		content.WriteString(fmt.Sprintf("=== Page %d ===\n%s\n\n", pageNum, truncated))
-	}
-
-	return fmt.Sprintf(`You are given multiple pages of a document. Your task is to detect which pages contain a Table of Contents (目录).
-
-A Table of Contents typically:
-- Contains chapter/section titles with page numbers
-- Has a "目录", "Table of Contents", "CHAPTER", "章", "第一节", etc. heading
-- Lists section names in sequence
-
-Abstract, summary, preface, figure list, table list, acknowledgments, and main body content are NOT table of contents.
-
-Given pages:
-%s
-
-Return a JSON array listing all page numbers that contain Table of Contents:
-{
-    "toc_pages": [page_number1, page_number2, ...]
-}
-
-If no page contains TOC, return empty array: {"toc_pages": []}
-Return ONLY the JSON. No explanation.`, content.String())
-}
 
 // tocTransformerPrompt creates prompt for TOC transformation
 func tocTransformerPrompt(tocContent string) string {
@@ -255,42 +217,7 @@ func (d *TOCDetector) detectTOCPage(ctx context.Context, content string) (bool, 
 	return strings.ToLower(result.TOCDetected) == "yes", nil
 }
 
-// detectTOCPagesBatch detects TOC pages in batch using a single LLM call
-func (d *TOCDetector) detectTOCPagesBatch(ctx context.Context, pages []string, startIndex, endIndex int) ([]int, error) {
-	if startIndex >= endIndex || startIndex >= len(pages) {
-		return nil, nil
-	}
 
-	if endIndex > len(pages) {
-		endIndex = len(pages)
-	}
-
-	pageContents := make(map[int]string)
-	for i := startIndex; i < endIndex; i++ {
-		pageContents[i] = pages[i]
-	}
-
-	prompt := batchTOCDetectorPrompt(pageContents)
-	response, err := d.llmClient.GenerateSimple(ctx, prompt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to detect TOC in batch: %w", err)
-	}
-
-	var result BatchTOCDetectorResult
-	if err := parseLLMJSONResponse(response, &result); err != nil {
-		log.Warn().Err(err).Str("response", response).Msg("Failed to parse batch TOC detection response")
-		return nil, nil
-	}
-
-	var tocPages []int
-	for _, pageNum := range result.TOCPages {
-		if pageNum >= startIndex && pageNum < endIndex {
-			tocPages = append(tocPages, pageNum)
-		}
-	}
-
-	return tocPages, nil
-}
 
 // findTOCPages scans pages to find TOC pages starting from startPageIndex.
 // Python: find_toc_pages in page_index.py:341-366

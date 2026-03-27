@@ -52,29 +52,7 @@ func (d *TOCDetector) checkTOCTransformationComplete(ctx context.Context, rawCon
 	return strings.ToLower(result.Completed) == "yes"
 }
 
-// detectPageIndex asks LLM if TOC has page numbers
-func (d *TOCDetector) detectPageIndex(ctx context.Context, tocContent string) (bool, error) {
-	prompt := fmt.Sprintf(`请检查给定的目录中是否包含页码信息。
-请严格按照JSON格式返回结果，不要任何其他内容：
-{
-    "page_index_given_in_toc": "yes或者no"
-}
 
-给定的目录内容：
-%s`, tocContent)
-
-	response, err := d.llmClient.GenerateSimple(ctx, prompt)
-	if err != nil {
-		return false, fmt.Errorf("failed to detect page index: %w", err)
-	}
-
-	var result PageIndexDetectorResult
-	if err := parseLLMJSONResponse(response, &result); err != nil {
-		return false, err
-	}
-
-	return strings.ToLower(result.PageIndexGiven) == "yes", nil
-}
 
 // extractTOCFromLLM extracts TOC structure from LLM response
 // Python: toc_transformer in page_index.py:273-336

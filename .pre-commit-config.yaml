@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.64.0
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        description: Fast Go linters runner
+        entry: golangci-lint run
+        language: golang
+        types: [go]
+        args: [--timeout=5m]
+        pass_filenames: false
+        always_run: true
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files

@@ -619,12 +619,15 @@ func TestGenerateTreeFromTOC_EndPageCalculation(t *testing.T) {
 	// Verify tree structure
 	chap1 := root.Children[0]
 	assert.Equal(t, 1, chap1.StartPage)
-	// Without AddChild fix, EndPage stays at initial value (calculated from next sibling)
-	assert.Equal(t, 1, chap1.EndPage)
+	// With AddChild fix, EndPage is updated to max(child.EndPage)
+	// Chapter 1 has no children, so EndPage = next sibling start page - 1 = 5-1=4
+	assert.Equal(t, 4, chap1.EndPage)
 
 	chap2 := root.Children[1]
 	assert.Equal(t, 5, chap2.StartPage)
-	assert.Equal(t, 5, chap2.EndPage)
+	// Chapter 2 has children, so EndPage = max(child.EndPage) = max(5,7) =7
+	// Next sibling starts at 10, so 10-1=9 which is larger, so EndPage=9
+	assert.Equal(t, 9, chap2.EndPage)
 
 	chap3 := root.Children[2]
 	assert.Equal(t, 10, chap3.StartPage)

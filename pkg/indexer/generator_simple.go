@@ -33,39 +33,9 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 
 		if i < len(items)-1 && items[i+1].PhysicalIndex != nil {
 			nextPhysicalIndex := *items[i+1].PhysicalIndex
-
-			// Check if next item is a child of current item
-			// Child means: nextStructure starts with currentStructure + "."
-			// Examples: "1" is parent of "1.1", "1.1" is parent of "1.1.1"
-			// But "1" is NOT a child of "1.1" (reverse is true)
-			currentStructure := items[i].Structure
-			nextStructure := items[i+1].Structure
-			isChild := strings.HasPrefix(nextStructure, currentStructure+".")
-
-			// If next item is a child, it shares the same page as parent
-			// If next item is a sibling or unrelated item on the same page, that's a bug
-			if nextPhysicalIndex == startPage && !isChild {
-				// Multiple sibling items on the same page - find the next item on a different page
-				j := i + 1
-				for j < len(items) && *items[j].PhysicalIndex == startPage {
-					j++
-				}
-				// If there's a next item on a different page, use it
-				if j < len(items) {
-					if items[j].AppearStart == "yes" {
-						items[i].EndPage = *items[j].PhysicalIndex - 1
-					} else {
-						items[i].EndPage = *items[j].PhysicalIndex
-					}
-				} else {
-					// No next item on different page, use totalPages
-					items[i].EndPage = totalPages
-				}
-			} else if items[i+1].AppearStart == "yes" {
-				items[i].EndPage = nextPhysicalIndex - 1
-			} else {
-				items[i].EndPage = nextPhysicalIndex
-			}
+			// By default, assume next item appears at the start of its page
+			// So current item ends at nextPhysicalIndex - 1
+			items[i].EndPage = nextPhysicalIndex - 1
 		} else {
 			// Last item
 			items[i].EndPage = totalPages // Page numbers are 1-based
