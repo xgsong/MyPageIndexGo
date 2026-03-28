@@ -18,9 +18,7 @@ func TestPDFParser_Integration(t *testing.T) {
 	if err != nil {
 		t.Skip("Test PDF file not found, skipping integration test")
 	}
-	if err := file.Close(); err != nil {
-		t.Logf("Failed to close file: %v", err)
-	}
+	defer file.Close()
 
 	doc, err := parser.Parse(file)
 	require.NoError(t, err)
@@ -46,22 +44,20 @@ func TestPDFParser_InvalidFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "invalid-*.txt")
 	require.NoError(t, err)
 	tmpName := tmpFile.Name()
+
+	_, err = tmpFile.WriteString("This is not a PDF file")
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
 	defer func() {
 		if err := os.Remove(tmpName); err != nil {
 			t.Logf("Failed to remove temp file: %v", err)
 		}
 	}()
 
-	_, err = tmpFile.WriteString("This is not a PDF file")
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-
 	// Try to parse it as PDF
 	file, err := os.Open(tmpFile.Name())
 	require.NoError(t, err)
-	if err := file.Close(); err != nil {
-		t.Logf("Failed to close file: %v", err)
-	}
+	defer file.Close()
 
 	_, err = parser.Parse(file)
 	assert.Error(t, err)
