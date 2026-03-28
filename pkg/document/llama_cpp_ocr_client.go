@@ -139,7 +139,7 @@ func (c *LlamaCppOCRClient) Recognize(ctx context.Context, req *OCRRequest) (*OC
 	if err != nil {
 		return nil, fmt.Errorf("OCR request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)

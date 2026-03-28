@@ -21,15 +21,16 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestLoadFromEnv(t *testing.T) {
-	// Save original env
 	origKey := os.Getenv("OPENAI_API_KEY")
 
-	// Set test env - only sensitive credentials can be set via environment
 	os.Setenv("OPENAI_API_KEY", "test-key-123")
 
 	defer func() {
-		// Restore original
-		os.Setenv("OPENAI_API_KEY", origKey)
+		if origKey != "" {
+			os.Setenv("OPENAI_API_KEY", origKey)
+		} else {
+			os.Unsetenv("OPENAI_API_KEY")
+		}
 	}()
 
 	cfg, err := LoadFromEnv()
@@ -42,14 +43,17 @@ func TestLoadFromEnv(t *testing.T) {
 }
 
 func TestLoadFromEnv_RequiresAPIKey(t *testing.T) {
-	// Ensure no API key in env
 	origKey1 := os.Getenv("OPENAI_API_KEY")
 	origKey2 := os.Getenv("OCR_API_KEY")
 	os.Unsetenv("OPENAI_API_KEY")
 	os.Unsetenv("OCR_API_KEY")
 	defer func() {
-		os.Setenv("OPENAI_API_KEY", origKey1)
-		os.Setenv("OCR_API_KEY", origKey2)
+		if origKey1 != "" {
+			os.Setenv("OPENAI_API_KEY", origKey1)
+		}
+		if origKey2 != "" {
+			os.Setenv("OCR_API_KEY", origKey2)
+		}
 	}()
 
 	cfg, err := LoadFromEnv()
@@ -59,7 +63,6 @@ func TestLoadFromEnv_RequiresAPIKey(t *testing.T) {
 }
 
 func TestLoadFromEnv_NonPrefixed(t *testing.T) {
-	// Test loading from non-prefixed environment variable (OPENAI_API_KEY)
 	origKey := os.Getenv("OPENAI_API_KEY")
 	origOcrKey := os.Getenv("OCR_API_KEY")
 
@@ -67,8 +70,16 @@ func TestLoadFromEnv_NonPrefixed(t *testing.T) {
 	os.Setenv("OCR_API_KEY", "test-ocr-key")
 
 	defer func() {
-		os.Setenv("OPENAI_API_KEY", origKey)
-		os.Setenv("OCR_API_KEY", origOcrKey)
+		if origKey != "" {
+			os.Setenv("OPENAI_API_KEY", origKey)
+		} else {
+			os.Unsetenv("OPENAI_API_KEY")
+		}
+		if origOcrKey != "" {
+			os.Setenv("OCR_API_KEY", origOcrKey)
+		} else {
+			os.Unsetenv("OCR_API_KEY")
+		}
 	}()
 
 	cfg, err := LoadFromEnv()
@@ -82,13 +93,15 @@ func TestLoadFromEnv_NonPrefixed(t *testing.T) {
 }
 
 func TestLoadFromEnv_SensitiveOnly(t *testing.T) {
-	// Test that only sensitive credentials are loaded from environment
-	// Non-sensitive config (model, concurrency, etc.) must come from config.yaml
 	origKey := os.Getenv("OPENAI_API_KEY")
 	os.Setenv("OPENAI_API_KEY", "test-key-sensitive")
 
 	defer func() {
-		os.Setenv("OPENAI_API_KEY", origKey)
+		if origKey != "" {
+			os.Setenv("OPENAI_API_KEY", origKey)
+		} else {
+			os.Unsetenv("OPENAI_API_KEY")
+		}
 	}()
 
 	cfg, err := LoadFromEnv()

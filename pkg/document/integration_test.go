@@ -18,7 +18,9 @@ func TestPDFParser_Integration(t *testing.T) {
 	if err != nil {
 		t.Skip("Test PDF file not found, skipping integration test")
 	}
-	defer file.Close()
+	if err := file.Close(); err != nil {
+		t.Logf("Failed to close file: %v", err)
+	}
 
 	doc, err := parser.Parse(file)
 	require.NoError(t, err)
@@ -43,16 +45,23 @@ func TestPDFParser_InvalidFile(t *testing.T) {
 	// Create a temporary file with invalid content
 	tmpFile, err := os.CreateTemp("", "invalid-*.txt")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	tmpName := tmpFile.Name()
+	defer func() {
+		if err := os.Remove(tmpName); err != nil {
+			t.Logf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	_, err = tmpFile.WriteString("This is not a PDF file")
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	// Try to parse it as PDF
 	file, err := os.Open(tmpFile.Name())
 	require.NoError(t, err)
-	defer file.Close()
+	if err := file.Close(); err != nil {
+		t.Logf("Failed to close file: %v", err)
+	}
 
 	_, err = parser.Parse(file)
 	assert.Error(t, err)
@@ -76,15 +85,16 @@ func TestPDFParser_FileTooLarge(t *testing.T) {
 	largeContent := make([]byte, 51*1024*1024)
 	_, err = tmpFile.Write(largeContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	file, err := os.Open(tmpFile.Name())
 	require.NoError(t, err)
-	defer file.Close()
 
 	_, err = parser.Parse(file)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "file too large")
+
+	require.NoError(t, file.Close())
 }
 
 // TestMarkdownParser_Integration tests markdown parsing

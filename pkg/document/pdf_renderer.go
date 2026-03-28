@@ -84,7 +84,7 @@ func (r *PDFRenderer) RenderAllPagesFromBytes(ctx context.Context, pdfData []byt
 	if err != nil {
 		return nil, fmt.Errorf("failed to open PDF document: %w", err)
 	}
-	defer doc.Close()
+	defer func() { _ = doc.Close() }()
 
 	return r.RenderAllPages(ctx, doc, concurrency)
 }

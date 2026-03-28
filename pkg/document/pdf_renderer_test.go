@@ -54,7 +54,7 @@ func TestPDFRenderer_RenderPage_InvalidPageNumber(t *testing.T) {
 	if err != nil {
 		t.Skip("Cannot open test PDF, skipping")
 	}
-	defer doc.Close()
+	defer func() { _ = doc.Close() }()
 
 	img, err := renderer.RenderPage(doc, -1)
 	assert.Error(t, err)
@@ -77,7 +77,7 @@ func TestPDFRenderer_RenderAllPages_ContextCancellation(t *testing.T) {
 	if err != nil {
 		t.Skip("Cannot open test PDF, skipping")
 	}
-	defer doc.Close()
+	defer func() { _ = doc.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

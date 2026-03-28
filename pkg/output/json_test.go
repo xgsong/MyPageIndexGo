@@ -24,8 +24,8 @@ func TestSaveAndLoadIndexTree(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "*.json")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	tmpFile.Close()
+	require.NoError(t, os.Remove(tmpPath))
+	require.NoError(t, tmpFile.Close())
 
 	// Save the index
 	err = SaveIndexTree(tree, tmpPath)
@@ -53,7 +53,7 @@ func TestSaveIndexTree_CreatesDirectory(t *testing.T) {
 	// Create a path with non-existent subdirectory
 	tmpDir := os.TempDir()
 	nestedPath := tmpDir + "/pageindex-test/subdir/index.json"
-	defer os.RemoveAll(tmpDir + "/pageindex-test")
+	require.NoError(t, os.RemoveAll(tmpDir+"/pageindex-test"))
 
 	// Save should create the directory
 	err := SaveIndexTree(tree, nestedPath)
@@ -75,9 +75,9 @@ func TestLoadIndexTree_InvalidJSON(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "*.json")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	_, _ = tmpFile.WriteString("not valid json")
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	_, err = LoadIndexTree(tmpPath)
 	assert.Error(t, err)
@@ -99,8 +99,8 @@ func TestSaveSearchResult(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "*.json")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
+	require.NoError(t, tmpFile.Close())
 
 	// Save the result
 	err = SaveSearchResult(result, tmpPath)

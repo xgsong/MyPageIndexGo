@@ -34,8 +34,8 @@ log_level: debug
 	}()
 
 	// Set env var for sensitive credential
-	os.Setenv("OPENAI_API_KEY", "test-key-from-env")
-	defer os.Unsetenv("OPENAI_API_KEY")
+	require.NoError(t, os.Setenv("OPENAI_API_KEY", "test-key-from-env"))
+	defer func() { _ = os.Unsetenv("OPENAI_API_KEY") }()
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -49,14 +49,12 @@ log_level: debug
 }
 
 func TestLoad_ConfigPriority(t *testing.T) {
-	// Set environment variable for sensitive credential only
-	os.Setenv("OPENAI_API_KEY", "test-key")
-	defer os.Unsetenv("OPENAI_API_KEY")
+	require.NoError(t, os.Setenv("OPENAI_API_KEY", "test-key"))
+	defer func() { _ = os.Unsetenv("OPENAI_API_KEY") }()
 
 	cfg, err := Load()
 	require.NoError(t, err)
 
-	// Non-sensitive config should come from config.yaml or defaults
 	assert.Equal(t, "test-key", cfg.OpenAIAPIKey)
 }
 
@@ -83,8 +81,8 @@ openai_model: gpt-4o
 	}()
 
 	// Set env var for sensitive credential
-	os.Setenv("OPENAI_API_KEY", "test-key")
-	defer os.Unsetenv("OPENAI_API_KEY")
+	require.NoError(t, os.Setenv("OPENAI_API_KEY", "test-key"))
+	defer func() { _ = os.Unsetenv("OPENAI_API_KEY") }()
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -105,12 +103,10 @@ func TestDefaultConfig_Values(t *testing.T) {
 }
 
 func TestLoadFromEnv_BackwardCompatibility(t *testing.T) {
-	// Test backward compatibility alias
-	os.Setenv("OPENAI_API_KEY", "test-key")
-	defer os.Unsetenv("OPENAI_API_KEY")
+	require.NoError(t, os.Setenv("OPENAI_API_KEY", "test-key"))
+	defer func() { _ = os.Unsetenv("OPENAI_API_KEY") }()
 
 	cfg, err := LoadFromEnv()
-	// In test mode, LoadFromEnv will succeed with defaults + env vars
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.Equal(t, "test-key", cfg.OpenAIAPIKey)
