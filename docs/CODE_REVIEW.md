@@ -235,7 +235,6 @@ Document Pages
 | **indexer 包文件过多** | 中 | 15 个 .go 文件，接近 8 文件限制 |
 | **generator 包职责分散** | 低 | 5 个 generator 文件，职责划分合理但数量偏多 |
 | **长函数** | 低 | `GroupPages` (214行)、`parseLLMJSONResponse` (159行) 较长 |
-| **循环依赖风险** | 低 | `generator_toc.go` 依赖多个 meta_processor 文件 |
 
 ### 架构坏味道检测
 
@@ -243,7 +242,7 @@ Document Pages
 |--------|----------|------|
 | 僵化 (Rigidity) | ✅ 未发现 | 接口抽象良好，变更成本低 |
 | 冗余 (Redundancy) | ✅ 未发现 | 无重复逻辑 |
-| 循环依赖 | ⚠️ 轻微 | generator_toc → meta_processor_* 较多，但通过接口解耦 |
+| 循环依赖 | ✅ 未发现 | 包内无循环导入，依赖关系清晰 |
 | 脆弱性 (Fragility) | ✅ 未发现 | 单一职责，测试覆盖充分 |
 | 晦涩性 (Obscurity) | ✅ 未发现 | 命名清晰，注释适当 |
 | 数据泥团 | ✅ 未发现 | 无臃肿参数列表 |
