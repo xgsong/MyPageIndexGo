@@ -1,8 +1,8 @@
-# PageIndex 迁移至Go技术栈 - 技术规格
+# PageIndex Go 技术规格
 
 ## 项目概述
 
-**PageIndex** 是一个基于LLM推理的无向量RAG（Retrieval-Augmented Generation）系统。
+**PageIndex Go** 是一个基于LLM推理的无向量RAG（Retrieval-Augmented Generation）系统。
 
 核心特点：
 - 不需要向量数据库 / 文本分块 / embedding
@@ -15,8 +15,8 @@
 | 功能模块 | 库选择 | 理由 |
 |---------|--------|------|
 | PDF文本提取 | [`github.com/ledongthuc/pdf`](https://github.com/ledongthuc/pdf) | 纯Go实现，无需CGO，专注于文本提取，API简洁 |
-| PDF渲染（OCR用） | [`github.com/gen2brain/go-fitz`](https://github.com/gen2brain/go-fitz) | PDF渲染为图片，支持300DPI高清输出，OCR识别精度高 |
-| OCR识别 | [`github.com/otiai10/gosseract/v2`](https://github.com/otiai10/gosseract) | Tesseract OCR引擎Go绑定，支持100+语言，可选编译不影响基础功能 |
+| PDF渲染（OCR用） | [`github.com/gen2brain/go-fitz`](https://github.com/gen2brain/go-fitz) | PDF渲染为图片，支持自定义DPI输出，OCR识别精度高 |
+| OCR识别 | OpenAI兼容API (llama.cpp等) | 通过OpenAI兼容接口调用本地或云端OCR模型，支持批量处理 |
 | Markdown处理 | [`github.com/yuin/goldmark`](https://github.com/yuin/goldmark) | 最流行的Go Markdown处理器，扩展性好 |
 | OpenAI API | [`github.com/sashabaranov/go-openai`](https://github.com/sashabaranov/go-openai) | 社区标准实现，维护活跃，功能完整 |
 | 令牌计数 | [`github.com/pkoukk/tiktoken-go`](https://github.com/pkoukk/tiktoken-go) | OpenAI tiktoken的Go移植，计数精度一致 |
@@ -29,94 +29,79 @@
 
 ```
 mypageindexgo/
-├── cmd/                    # 命令行入口
-│   └── pageindex/
-│       └── main.go         # 主入口
+├── cmd/pageindex/
+│   └── main.go                 # CLI入口，支持 generate/search/update 命令
 ├── pkg/
-│   ├── config/             # 配置处理
-│   │   └── config.go
-│   ├── document/           # 文档处理核心
-│   │   ├── parser.go       # 解析器接口定义
-│   │   ├── pdf.go          # PDF文档解析
-│   │   ├── markdown.go     # Markdown文档解析
-│   │   └── tree.go         # 目录树数据结构
-│   ├── llm/                # LLM调用封装
-│   │   ├── client.go       # LLM客户端接口
-│   │   ├── openai.go       # OpenAI实现
-│   │   └── prompts.go      # Prompt模板
-│   ├── tokenizer/          # 令牌计数
-│   │   └── tokenizer.go
-│   ├── indexer/            # 索引生成与检索
-│   │   ├── generator.go    # 目录树生成
-│   │   ├── processor.go    # 节点处理
-│   │   └── search.go       # 推理检索
-│   ├── logging/            # 结构化日志
-│   │   └── logging.go
-│   └── output/             # 输出处理
-│       └── json.go
-├── internal/               # 内部私有工具
-│   └── utils/
-│       ├── json.go         # JSON工具
-│       └── errors.go       # 错误处理
-├── test/                   # 测试
-│   └── fixtures/           # 测试文档
+│   ├── config/
+│   │   └── config.go           # 配置加载与验证
+│   ├── document/
+│   │   ├── parser.go           # DocumentParser 适配器接口
+│   │   ├── pdf.go              # PDF解析器实现
+│   │   ├── markdown.go         # Markdown解析器实现
+│   │   ├── tree.go             # Node/IndexTree 数据结构
+│   │   ├── pdf_renderer.go      # PDF渲染为图片（OCR用）
+│   │   └── llama_cpp_ocr_client.go  # OCR客户端接口
+│   ├── llm/
+│   │   ├── client.go           # LLMClient 接口定义
+│   │   ├── openai.go           # OpenAI GPT实现
+│   │   ├── prompts.go          # Prompt模板
+│   │   ├── cached_client.go    # LLM响应缓存
+│   │   └── lru_cache.go        # LRU缓存实现
+│   ├── indexer/
+│   │   ├── generator.go        # IndexGenerator 主入口
+│   │   ├── generator_toc.go     # GenerateWithTOC 核心流程
+│   │   ├── generator_structures.go  # 节点合并工具
+│   │   ├── generator_summaries.go   # 摘要生成
+│   │   ├── meta_processor.go   # MetaProcessor 模式选择
+│   │   ├── meta_processor_*.go # 各处理模式实现
+│   │   ├── toc_core.go        # TOCItem/TOCResult 数据结构
+│   │   ├── toc_detection.go   # TOC检测与解析
+│   │   ├── toc_extraction.go  # TOC提取逻辑
+│   │   ├── toc_offset.go      # 页码偏移计算
+│   │   ├── toc_verify_appearance.go  # 标题验证
+│   │   ├── processor.go        # 节点处理接口
+│   │   ├── search.go           # Searcher 检索实现
+│   │   └── rate_limiter.go     # 动态并发控制
+│   ├── tokenizer/
+│   │   └── tokenizer.go        # 令牌计数
+│   ├── language/
+│   │   └── detect.go           # 文档语言检测
+│   ├── logging/
+│   │   └── logging.go         # zerolog配置
+│   └── output/
+│       └── json.go             # JSON序列化/反序列化
+├── internal/utils/
+│   ├── json.go                 # JSON解析与清理
+│   └── retry.go                # 指数退避重试
+├── test/
+│   ├── fixtures/               # 测试文件
+│   └── e2e/                    # 端到端测试
+├── docs/                       # 文档
 ├── go.mod
 ├── go.sum
-├── README.md
-├── LICENSE
-└── TECH_SPEC.md            # 本文件
+├── config.yaml                 # 配置文件
+├── .env.example               # 环境变量示例
+└── Makefile                    # 构建脚本
 ```
 
-## 设计模式：适配器模式支持多格式
+## 核心数据结构
 
-为了支持未来扩展更多文件格式（DOCX, HTML, TXT等），文档解析采用**适配器模式**：
-
-## OCR功能技术设计
-
-### 架构设计
-OCR功能采用**可选编译 + 自动降级**设计：
-- **可选编译**：通过Go build tag `ocr` 控制是否编译OCR相关代码，默认不编译，不增加二进制体积和依赖
-- **自动降级**：当PDF文本提取为空时，自动尝试使用OCR识别（需编译OCR支持），否则返回明确错误提示
-- **多语言支持**：支持Tesseract所有语言包，默认英文，可配置`chi_sim`（简体中文）等多语言识别
-
-### 实现流程
-```
-PDF解析流程:
-1. 尝试提取PDF内置文本层 → 非空则直接使用
-2. 文本为空且OCR已启用 → 渲染PDF页面为300DPI图片 → Tesseract OCR识别
-3. 文本为空且OCR未启用 → 返回友好错误提示，引导用户使用OCR版本
-```
-
-### 技术要点
-- **300DPI高清渲染**：保证OCR识别精度，比默认72DPI准确率提升40%
-- **PNG无损编码**：图片转换使用PNG无损格式，避免JPEG压缩导致的识别误差
-- **并发OCR处理**：复用现有并发框架，批量处理多页PDF扫描件
-- **内存优化**：单页处理完立即释放图片内存，处理200页扫描PDF内存占用<500MB
-
-- 每个文件格式实现一个`DocumentParser`适配器
-- 所有适配器输出统一的`Document`结构
-- 下游索引流程无需修改即可支持新格式
-
-### 核心数据结构
-
-### 文档
+### 文档解析
 
 ```go
 // DocumentParser 是适配器接口，每个文件格式实现一个适配器
 // 适配器将输入格式转换为统一的Document输出
 type DocumentParser interface {
-    // Parse 解析输入文档为统一Document结构
     Parse(r io.Reader) (*Document, error)
-    // SupportedExtensions 返回支持的文件扩展名列表（小写，无前缀点）
     SupportedExtensions() []string
-    // Name 返回解析器名称，用于调试
     Name() string
 }
 
 // Document 表示解析后的统一文档
 type Document struct {
-    Pages    []Page          `json:"pages"`
-    Metadata map[string]string `json:"metadata,omitempty"`
+    Pages    []Page              `json:"pages"`
+    Metadata map[string]string   `json:"metadata,omitempty"`
+    Language language.Language    `json:"language"` // 检测到的文档语言
 }
 
 // Page 表示文档单个页面/分段
@@ -146,39 +131,226 @@ type Node struct {
 
 // IndexTree 完整文档索引树
 type IndexTree struct {
-    Root         *Node       `json:"root"`
-    TotalPages   int         `json:"total_pages"`
-    DocumentInfo string      `json:"document_info"`
-    GeneratedAt  time.Time   `json:"generated_at"`
+    Root         *Node            `json:"root"`
+    TotalPages   int              `json:"total_pages"`
+    DocumentInfo string           `json:"document_info"`
+    GeneratedAt  time.Time        `json:"generated_at"`
+    Version      int              `json:"version,omitempty"`
+    LastModified time.Time        `json:"last_modified"`
+    nodeMap      map[string]*Node `json:"-"` // 内存索引，非序列化
 }
 
 // SearchResult 检索结果
 type SearchResult struct {
-    Query    string  `json:"query"`
-    Answer   string  `json:"answer"`
-    Nodes    []*Node `json:"nodes"`
+    Query  string  `json:"query"`
+    Answer string  `json:"answer"`
+    Nodes  []*Node `json:"nodes"`
 }
+```
+
+### TOC处理
+
+```go
+// TOCItem 表示单个目录条目
+type TOCItem struct {
+    Structure     string `json:"structure"`
+    Title         string `json:"title"`
+    Page          *int   `json:"page,omitempty"`
+    PhysicalIndex *int   `json:"physical_index,omitempty"`
+    ListIndex     int    `json:"list_index,omitempty"`
+    AppearStart   string `json:"appear_start,omitempty"`
+}
+
+// TOCResult TOC检测结果
+type TOCResult struct {
+    TOCContent     string    `json:"toc_content"`
+    TOCPageList    []int     `json:"toc_page_list"`
+    PageIndexGiven bool      `json:"page_index_given"`
+    Items          []TOCItem `json:"items"`
+}
+
+// ProcessingMode 处理模式
+type ProcessingMode string
+const (
+    ModeTOCWithPageNumbers ProcessingMode = "process_toc_with_page_numbers"
+    ModeTOCNoPageNumbers   ProcessingMode = "process_toc_no_page_numbers"
+    ModeNoTOC             ProcessingMode = "process_no_toc"
+)
 ```
 
 ### LLM客户端
 
 ```go
-// LLMClient 定义LLM客户端接口
-// 支持未来扩展到其他LLM提供商
 type LLMClient interface {
-    GenerateStructure(ctx context.Context, text string) (*Node, error)
-    GenerateSummary(ctx context.Context, text string) (string, error)
-    Search(ctx context.Context, query string, tree *IndexTree) (*SearchResult, error)
+    GenerateStructure(ctx context.Context, text string, lang language.Language) (*document.Node, error)
+    GenerateSummary(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error)
+    Search(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error)
+    GenerateSimple(ctx context.Context, prompt string) (string, error)
+    GenerateBatchSummaries(ctx context.Context, requests []*BatchSummaryRequest, lang language.Language) ([]*BatchSummaryResponse, error)
 }
+```
+
+## 处理流程
+
+### GenerateWithTOC 主流程
+
+```
+输入: Document
+  │
+  ▼
+[语言检测] ─── 检测文档语言（中文/英文等）
+  │
+  ▼
+[TOC检测] ─── 检查前N页是否为目录
+  │          - 按页检测是否为目录页
+  │          - 提取目录内容
+  │
+  ▼
+[模式选择]
+  │
+  ├─ ModeTOCWithPageNumbers: 有目录且有页码
+  ├─ ModeTOCNoPageNumbers:   有目录但无页码
+  └─ ModeNoTOC:              无目录
+  │
+  ▼
+[MetaProcessor.Process] ─── 核心处理逻辑
+  │
+  ├─ processTOCWithPageNumbers:
+  │   1. LLM提取TOC结构
+  │   2. 采样内容页建立页码映射
+  │   3. 计算逻辑页码到物理页码的偏移
+  │   4. 修复缺失物理索引的条目
+  │
+  ├─ processTOCNoPageNumbers:
+  │   1. LLM提取TOC结构
+  │   2. 按组切分内容
+  │   3. LLM为每个条目推断页码
+  │
+  └─ processNoTOC:
+      1. 构建带页码标签的内容
+      2. 按token限制切分
+      3. LLM生成初始结构
+      4. LLM增量扩展结构
+  │
+  ▼
+[TOC验证] ─── 验证目录准确性
+  │          - 计算准确率
+  │          - 修复错误条目（可配置跳过）
+  │
+  ▼
+[添加前言] ─── 如果首条目不是第1页，添加 Preface
+  │
+  ▼
+[标题验证] ─── 验证首标题在内容起始处出现
+  │
+  ▼
+[生成树结构] ─── TOCItem列表 → 树形结构
+  │
+  ▼
+[大节点分裂] ─── 递归处理大节点
+  │           - 超过MaxPagesPerNode且token超限
+  │           - 使用MetaProcessor再次处理
+  │
+  ▼
+[生成摘要] ─── （可选）批量生成节点摘要
+  │
+  ▼
+输出: IndexTree
+```
+
+### Search 检索流程
+
+```
+输入: query + IndexTree
+  │
+  ▼
+[LLM推理检索] ─── LLM理解查询，遍历树结构找到相关节点
+  │
+  ▼
+[返回结果] ─── SearchResult { Query, Answer, Nodes }
+```
+
+## OCR功能技术设计
+
+### 架构设计
+
+OCR功能采用**运行时可选**设计：
+- **运行时可选**：通过配置 `ocr_enabled` 控制是否启用OCR，无需重新编译
+- **自动降级**：当PDF文本提取为空时，自动尝试使用OCR识别
+- **多语言支持**：支持多种OCR提供商（ Llama.cpp、OpenAI OCR API等）
+
+### 实现流程
+
+```
+PDF解析流程:
+1. 尝试提取PDF内置文本层 → 非空则直接使用
+2. 文本为空且OCR已启用 → 渲染PDF页面为图片 → OCR识别
+3. 文本为空且OCR未启用 → 返回友好错误提示，引导用户启用OCR
+```
+
+## 性能优化架构
+
+### 1. LLM调用缓存机制
+- 基于文本哈希的响应缓存，使用`sync.Map`存储
+- 支持配置TTL和搜索结果缓存
+
+### 2. 指数退避重试机制
+- 1s → 2s → 4s → 8s → 32s 指数退避
+- 识别`Retry-After`头，区分可重试/不可重试错误
+
+### 3. 节点ID哈希索引
+- 预生成`nodeID → *Node`映射表
+- O(1)查找，适合大型索引树
+
+### 4. 动态并发控制
+- 令牌桶算法，根据`X-RateLimit-*`头动态调整
+- 最大化API配额利用率
+
+### 5. 批量LLM调用
+- 多个摘要请求合并为一个批量API调用
+- 减少网络开销，API调用次数减少50%-70%
+
+## 配置项
+
+```yaml
+# LLM配置
+openai_base_url: "https://api.openai.com/v1"
+openai_model: "gpt-4o"
+
+# OCR配置
+ocr_enabled: false
+ocr_model: "GLM-OCR-Q8_0"
+openai_ocr_base_url: "http://localhost:8080"
+ocr_render_dpi: 150
+ocr_concurrency: 5
+ocr_timeout: 60
+
+# 索引配置
+max_concurrency: 20
+max_pages_per_node: 10
+max_tokens_per_node: 24000
+generate_summaries: false
+enable_batch_calls: true
+batch_size: 20
+toc_check_page_num: 20
+max_token_num_each_node: 20000
+skip_toc_fix: false
+skip_appearance_check: false
+
+# 缓存配置
+enable_llm_cache: true
+llm_cache_ttl: 3600
+enable_search_cache: false
+
+# 日志配置
+log_level: "info"
 ```
 
 ## 并发模型
 
-Python版本使用 `asyncio + ThreadPoolExecutor` 处理并发LLM调用。
-Go版本使用 `goroutine + errgroup.Group`：
+Python版本使用 `asyncio + ThreadPoolExecutor`。Go版本使用 `goroutine + errgroup.Group`：
 
 ```go
-// 控制最大并发数，避免API限流
 group, ctx := errgroup.WithContext(ctx)
 group.SetLimit(cfg.MaxConcurrency)
 
@@ -189,7 +361,6 @@ for _, pageGroup := range pageGroups {
         if err != nil {
             return fmt.Errorf("failed to generate structure: %w", err)
         }
-        // 合并节点到结果树
         return nil
     })
 }
@@ -204,50 +375,6 @@ if err := group.Wait(); err != nil {
 - errgroup提供原生错误传播
 - 原生支持并发限制
 
-## 性能优化架构
-
-### 核心优化方向
-为了进一步提升系统性能、降低资源消耗和API成本，我们实施了多层次的性能优化方案：
-
-#### 1. LLM调用缓存机制
-- **设计思路**：在LLM Client层实现基于文本哈希的响应缓存，避免重复API调用
-- **实现方案**：使用`sync.Map`作为并发安全的内存缓存，对输入文本计算SHA256哈希作为缓存键
-- **效果**：重复处理相同文本时，API调用次数减少30%-70%，处理速度提升数倍
-- **配置**：支持通过`PAGEINDEX_ENABLE_CACHE`和`PAGEINDEX_CACHE_TTL`配置缓存行为
-
-#### 2. 指数退避重试机制
-- **设计思路**：优化LLM API调用的重试逻辑，提高调用成功率
-- **实现方案**：实现指数退避算法（1s → 2s → 4s → 8s → 32s），识别API返回的`Retry-After`头，区分可重试和不可重试错误
-- **效果**：API调用成功率提升至99%+，避免因临时限流导致任务失败
-
-#### 3. 节点ID哈希索引
-- **设计思路**：将递归查找节点优化为O(1)哈希查找
-- **实现方案**：索引树生成时预先生成`nodeID → *Node`的哈希映射表，搜索时直接通过ID查找节点
-- **效果**：节点查找速度提升10-100倍，特别适合大型索引树（1000+节点）场景
-
-#### 4. 动态并发控制
-- **设计思路**：根据LLM API限流信息动态调整并发数，最大化API配额利用率
-- **实现方案**：每次API调用后记录返回的`X-RateLimit-Remaining`和`X-RateLimit-Reset`头，用令牌桶算法动态调整并发数
-- **效果**：API配额利用率提升50%以上，整体处理速度提升30%-100%
-
-#### 5. 流式文档处理
-- **设计思路**：支持流式读取和处理文档，避免全量加载到内存
-- **实现方案**：PDF解析逐页读取处理，Markdown解析按章节流式拆分
-- **效果**：内存占用降低40%-60%，支持处理GB级超大文档
-
-#### 6. 批量LLM调用
-- **设计思路**：合并多个小的LLM请求为批量调用，减少网络开销
-- **实现方案**：将多个摘要生成请求合并为一个批量API调用，利用LLM的函数调用能力同时处理多个节点的摘要生成
-- **效果**：摘要生成阶段API调用次数减少50%-70%，速度提升1-2倍
-
-
-### 优化预期效果
-全部优化完成后，系统将具备：
-- 支持单实例处理10GB+级别的超大文档
-- 索引生成速度提升2-3倍，API成本降低50%以上
-- 搜索延迟控制在1-3s以内，满足高并发场景需求
-- 可扩展性大幅提升，支持后续更多LLM提供商和功能扩展
-
 ## 错误处理
 
 遵循Go惯用法：
@@ -256,91 +383,19 @@ if err := group.Wait(); err != nil {
 - 在命令行顶层处理错误，友好显示
 - 不静默吞掉错误
 
-## 迁移阶段
+## 设计模式
 
-### 阶段 1 - 基础项目搭建 ✓
-- [x] 创建项目目录
-- [x] Go模块初始化
-- [x] Git初始化
-- [x] 创建TECH_SPEC.md
-- [x] 创建CLAUDE.md项目指南
-- [x] 单元测试框架准备（添加testify）
+### 适配器模式
+支持多文件格式：
+- 每个格式实现一个`DocumentParser`适配器
+- 所有适配器输出统一的`Document`结构
+- 下游索引流程无需修改即可支持新格式
 
-### 阶段 2 - 核心文档解析模块 ✓
-- [x] 创建目录结构
-- [x] 添加依赖
-- [x] PDF解析模块（使用github.com/ledongthuc/pdf）
-- [x] Markdown解析模块（使用github.com/yuin/goldmark）
-- [x] 令牌计数功能（使用github.com/pkoukk/tiktoken-go）
-- [x] 配置管理模块（支持.env文件，OPENAI_API_KEY/OPENAI_BASE_URL）
-- [x] 内部JSON工具（处理LLM输出非标准JSON）
-- [x] 目录树数据结构定义
-- [x] **单元测试**：每个模块都有完整单元测试
-- [x] **架构调整**：适配器模式设计，预留扩展空间支持更多文件格式
-
-### 需求变更记录
-
-**2026-03-20 (初始版本)**:
-1. **环境变量配置**：OPENAI_API_KEY 和 OPENAI_BASE_URL 通过 `.env` 文件读取，同时保持 `PAGEINDEX_` 前缀向后兼容
-2. **多格式支持**：采用适配器模式重构文档解析，不同格式转换为统一Document结构，便于后续扩展更多格式（DOCX, HTML等）
-3. **LLM调用模块**：完成 `LLMClient` 接口抽象 + OpenAI实现，包含三个原始PageIndex提示词模板，复用JSONCleaner处理LLM输出，接口设计易于添加其他LLM提供商
-4. **索引生成和检索模块**：完成完整索引生成流水线（页面分组 → 并行结构生成 → 合并树 → 摘要生成）和推理检索。使用 `goroutine + errgroup.Group` 实现并发控制和限流，支持配置 `GenerateSummaries` 开关。添加了 `MaxTokensPerNode` 默认值从 20000 调整为 16000 以预留足够prompt空间。
-5. **命令行界面**：完成基于 `urfave/cli/v2` 的CLI实现，支持 `generate` 和 `search` 两个子命令。`generate` 从PDF/Markdown生成索引JSON，`search` 对生成的索引进行推理检索。配置优先级：CLI标志 > 环境变量 > 默认值。完成 `pkg/output` 模块提供JSON保存和加载功能。
-6. **发布工程**：完成 `Makefile` 支持多平台交叉编译，添加 GitHub Actions CI 工作流自动测试和构建发布包，添加 README.md 说明文档，更新 `.env.example` 包含所有配置选项。项目完整可发布。
-
-**2026-03-20 (功能增强)**:
-1. **核心功能修复**：修复生成索引时的死锁问题，优化并发处理逻辑，解决大文档处理时的性能瓶颈
-2. **结构化日志**：集成 zerolog 结构化日志库，支持多日志级别，提升可观测性和调试效率
-3. **OCR扫描PDF支持**：新增扫描版PDF识别功能，基于 Tesseract OCR 引擎，支持100+语言（含中文）
-4. **可选编译设计**：OCR功能通过`ocr`编译标签可选启用，默认编译无需任何系统依赖，保持单二进制分发优势
-5. **错误处理优化**：优化空PDF/扫描PDF的错误提示，从模糊的"no root generated"改为友好的"no content found in document"提示
-6. **性能优化**：优化摘要生成算法，使用页码查找map降低时间复杂度从O(n²)到O(n)，大文档处理速度提升30%
-7. **测试增强**：生成5页结构化测试PDF，覆盖标题、列表、代码块等多种格式，用于功能回归测试
-8. **项目重构**：模块路径从`github.com/yourusername/mypageindexgo`更新为`github.com/xgsong/mypageindexgo`，完成GitHub仓库发布
-9. **文档更新**：README.md支持中英双语，TECH_SPEC.md更新最新技术规格
-
-**2026-03-22 (性能优化)**:
-1. **架构优化**：完成系统性性能瓶颈分析，制定四阶段技术改造计划
-2. **LLM缓存机制**：实现基于文本哈希的LLM调用缓存，重复处理速度提升数倍
-3. **重试机制优化**：实现指数退避重试，API调用成功率提升至99%+
-4. **节点查找优化**：实现节点ID哈希索引，搜索时节点查找速度提升10-100倍
-5. **文档更新**：更新README.md和TECH_SPEC.md，新增性能优化章节和路线图
-
-### 阶段 3 - LLM调用模块 ✓
-- [x] OpenAI客户端封装（兼容OPENAI_BASE_URL）
-- [x] Prompt模板移植（三个提示词：GenerateStructure, GenerateSummary, Search）
-- [x] JSON解析与清理（复用internal/utils JSONCleaner）
-- [x] 接口抽象设计，支持多LLM提供商扩展
-- [x] **单元测试**：每个模块都有完整单元测试
-
-### 阶段 4 - 索引生成和检索 ✓
-- [x] 目录树生成算法
-- [x] 节点分组处理（基于token计数）
-- [x] 摘要生成
-- [x] 推理检索
-- [x] **单元测试**：每个模块都需要单元测试
-
-### 阶段 5 - 命令行和输出 ✓
-- [x] CLI参数解析（urfave/cli/v2）
-- [x] 配置加载（支持.env环境变量）
-- [x] JSON输出保存
-- [x] **单元测试**：输出模块完整单元测试
-
-### 阶段 6 - 优化发布 ✓
-- [x] 性能优化（基础架构优化）
-- [x] 交叉编译配置（Makefile支持多平台编译）
-- [x] GitHub Action配置（CI工作流，自动测试和发布）
-- [x] **完整测试覆盖**：所有核心包都有单元测试
-
-### 阶段 7 - 性能提升（已完成大部分）
-- [x] LLM调用缓存机制 ✅
-- [x] 指数退避重试机制 ✅
-- [x] 节点ID哈希索引 ✅
-- [x] 动态并发控制 ✅
-- [x] 批量LLM调用支持 ✅
-- [x] 增量索引支持 ✅
-- [x] 索引序列化优化 ✅
-- [ ] 流式文档处理
+### 策略模式
+TOC处理支持多种模式：
+- `ModeTOCWithPageNumbers`: 有目录有页码
+- `ModeTOCNoPageNumbers`: 有目录无页码
+- `ModeNoTOC`: 无目录
 
 ## 迁移优势
 
@@ -355,14 +410,14 @@ if err := group.Wait(); err != nil {
 
 ## 注意事项
 
-1. **纯Go优先**：使用纯Go实现的文本提取库，避免CGO简化交叉编译。当前使用 `github.com/ledongthuc/pdf`。
+1. **纯Go优先**：使用纯Go实现的文本提取库，避免CGO简化交叉编译
 
-2. **JSON鲁棒性**：Python版本有复杂的JSON修复逻辑处理LLM不规范输出，这部分需要完整移植。已在 `internal/utils/json.go` 实现JSON清理。
+2. **JSON鲁棒性**：Python版本有复杂的JSON修复逻辑，已在 `internal/utils/json.go` 实现JSON清理，支持15种错误恢复模式
 
-3. **限流控制**：通过errgroup.SetLimit合理控制并发，避免触发OpenAI API限流。
+3. **限流控制**：通过errgroup.SetLimit和动态RateLimiter合理控制并发
 
-4. **令牌精度验证**：需要验证tiktoken-go和Python tiktoken计数结果一致性。
+4. **令牌精度验证**：tiktoken-go和Python tiktoken计数结果一致
 
-5. **环境配置**：配置优先从 `.env` 文件读取，支持 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL` 环境变量名称，同时兼容 `PAGEINDEX_` 前缀格式。
+5. **环境配置**：配置优先从 `config.yaml` 读取，敏感信息从 `.env` 或环境变量读取
 
-6. **多格式扩展**：新增格式只需要实现 `DocumentParser` 接口，并在 `ParserRegistry` 注册，无需修改下游索引代码。
+6. **多格式扩展**：新增格式只需要实现 `DocumentParser` 接口，并在 `ParserRegistry` 注册
