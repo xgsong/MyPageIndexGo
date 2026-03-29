@@ -87,7 +87,20 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 		return result, nil
 	}
 
-	if accuracy > 0.6 && len(incorrectResults) > 0 {
+	// Check if accuracy is too low (< 0.3) - trigger fallback
+	if len(incorrectResults) == 0 && accuracy < 0.3 {
+		switch mode {
+		case ModeTOCWithPageNumbers:
+			return mp.Process(ctx, pageTexts, ModeTOCNoPageNumbers, tocContent, tocPageList, startIndex)
+		case ModeTOCNoPageNumbers:
+			return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
+		case ModeNoTOC:
+			return result, nil
+		}
+	}
+
+	// accuracy >= 0.6 - try to fix incorrect items
+	if accuracy >= minTOCAccuracy && len(incorrectResults) > 0 {
 		if !mp.cfg.SkipTOCFix {
 			fixedResult, _, err := mp.fixIncorrectTOCWithRetries(ctx, result, pageTexts, incorrectResults, startIndex, 3)
 			if err == nil {
@@ -97,13 +110,8 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 		return result, nil
 	}
 
-	// Accuracy too low, fallback to simpler mode
-	switch mode {
-	case ModeTOCWithPageNumbers:
-		return mp.Process(ctx, pageTexts, ModeTOCNoPageNumbers, tocContent, tocPageList, startIndex)
-	case ModeTOCNoPageNumbers:
-		return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
-	case ModeNoTOC:
+	// Borderline accuracy (0.3 <= accuracy < 0.6) with incorrect items - return results as-is
+	if len(incorrectResults) > 0 {
 		return result, nil
 	}
 
@@ -141,7 +149,7 @@ func (mp *MetaProcessor) processTOCWithPageNumbers(ctx context.Context, pageText
 
 	// Step 3: Match TOC page numbers to physical indices
 	matchingPairs := mp.extractMatchingPagePairs(tocItems, tocWithPhysicalIndex, sampleStart)
-	offset := mp.calculatePageOffset(matchingPairs)
+	offset := mp.calculatePageOffset(matchingPairs, len(pageTexts))
 
 	// Step 4: Apply offset to convert logical page to physical index
 	if offset != nil {

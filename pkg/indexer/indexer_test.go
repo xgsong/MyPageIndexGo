@@ -235,7 +235,7 @@ func TestCalculatePageOffset(t *testing.T) {
 	mp := &MetaProcessor{}
 
 	t.Run("no pairs", func(t *testing.T) {
-		result := mp.calculatePageOffset([]PageIndexPair{})
+		result := mp.calculatePageOffset([]PageIndexPair{}, 100)
 		assert.Nil(t, result)
 	})
 
@@ -243,7 +243,7 @@ func TestCalculatePageOffset(t *testing.T) {
 		pairs := []PageIndexPair{
 			{Page: 10, PhysicalIndex: 15},
 		}
-		result := mp.calculatePageOffset(pairs)
+		result := mp.calculatePageOffset(pairs, 100)
 		assert.NotNil(t, result)
 		assert.Equal(t, 5, *result)
 	})
@@ -254,7 +254,7 @@ func TestCalculatePageOffset(t *testing.T) {
 			{Page: 20, PhysicalIndex: 25},
 			{Page: 30, PhysicalIndex: 35},
 		}
-		result := mp.calculatePageOffset(pairs)
+		result := mp.calculatePageOffset(pairs, 100)
 		assert.NotNil(t, result)
 		assert.Equal(t, 5, *result)
 	})
@@ -265,7 +265,7 @@ func TestCalculatePageOffset(t *testing.T) {
 			{Page: 20, PhysicalIndex: 22},
 			{Page: 30, PhysicalIndex: 35},
 		}
-		result := mp.calculatePageOffset(pairs)
+		result := mp.calculatePageOffset(pairs, 100)
 		assert.NotNil(t, result)
 		assert.Equal(t, 5, *result)
 	})

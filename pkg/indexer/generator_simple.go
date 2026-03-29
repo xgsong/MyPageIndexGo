@@ -27,14 +27,16 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 	// This ensures items are in page order, not structure order (1, 1.1, 1.2, 2...)
 	// Without this, EndPage calculation produces wrong results
 	sort.Slice(items, func(i, j int) bool {
-		// Items without PhysicalIndex go to the end
 		if items[i].PhysicalIndex == nil {
 			return false
 		}
 		if items[j].PhysicalIndex == nil {
 			return true
 		}
-		return *items[i].PhysicalIndex < *items[j].PhysicalIndex
+		if *items[i].PhysicalIndex != *items[j].PhysicalIndex {
+			return *items[i].PhysicalIndex < *items[j].PhysicalIndex
+		}
+		return items[i].ListIndex < items[j].ListIndex
 	})
 
 	// Second pass: Calculate end_index for each item

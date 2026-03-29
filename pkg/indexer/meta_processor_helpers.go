@@ -1,8 +1,12 @@
 package indexer
 
 import (
+	"sort"
 	"strings"
+	"unicode"
 )
+
+const minMatchPairs = 3
 
 // Helper functions
 
@@ -72,7 +76,7 @@ func (mp *MetaProcessor) extractMatchingPagePairs(tocWithPages []TOCItem, tocWit
 			continue
 		}
 		for _, pageItem := range tocWithPages {
-			if phyItem.Title == pageItem.Title && pageItem.Page != nil {
+			if titlesMatch(phyItem.Title, pageItem.Title) && pageItem.Page != nil {
 				pairs = append(pairs, PageIndexPair{
 					Title:         pageItem.Title,
 					Page:          *pageItem.Page,
@@ -85,9 +89,14 @@ func (mp *MetaProcessor) extractMatchingPagePairs(tocWithPages []TOCItem, tocWit
 	return pairs
 }
 
-func (mp *MetaProcessor) calculatePageOffset(pairs []PageIndexPair) *int {
+func (mp *MetaProcessor) calculatePageOffset(pairs []PageIndexPair, totalPages int) *int {
 	if len(pairs) == 0 {
 		return nil
+	}
+
+	medianOffset := mp.calculateMedianOffset(pairs, totalPages)
+	if medianOffset != nil {
+		return medianOffset
 	}
 
 	differences := make(map[int]int)
@@ -96,7 +105,6 @@ func (mp *MetaProcessor) calculatePageOffset(pairs []PageIndexPair) *int {
 		differences[diff]++
 	}
 
-	// Find most common difference
 	maxCount := 0
 	mostCommon := 0
 	for diff, count := range differences {
@@ -112,23 +120,170 @@ func (mp *MetaProcessor) calculatePageOffset(pairs []PageIndexPair) *int {
 	return nil
 }
 
+func (mp *MetaProcessor) calculateMedianOffset(pairs []PageIndexPair, totalPages int) *int {
+	if len(pairs) < minMatchPairs {
+		return nil
+	}
+
+	diffs := make([]int, len(pairs))
+	for i, pair := range pairs {
+		diffs[i] = pair.PhysicalIndex - pair.Page
+	}
+
+	sort.Ints(diffs)
+
+	var median int
+	n := len(diffs)
+	if n%2 == 0 {
+		median = (diffs[n/2-1] + diffs[n/2]) / 2
+	} else {
+		median = diffs[n/2]
+	}
+
+	if abs(median) > totalPages/2 {
+		return nil
+	}
+
+	return &median
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func normalizeTitle(title string) string {
+	title = strings.TrimSpace(title)
+	title = strings.ToLower(title)
+	var result strings.Builder
+	for _, r := range title {
+		if !unicode.IsPunct(r) {
+			result.WriteRune(r)
+		}
+	}
+	normalized := result.String()
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	return normalized
+}
+
+func levenshteinDistance(s1, s2 string, max int) int {
+	len1, len2 := len(s1), len(s2)
+
+	if abs(len1-len2) > max {
+		return max + 1
+	}
+
+	if len1 == 0 {
+		return len2
+	}
+	if len2 == 0 {
+		return len1
+	}
+
+	if len1 > len2 {
+		s1, s2 = s2, s1
+		len1, len2 = len2, len1
+	}
+
+	column := make([]int, len1+1)
+	for i := range column {
+		column[i] = i
+	}
+
+	for j := 1; j <= len2; j++ {
+		diagonalUpLeft := column[0]
+		column[0] = j
+
+		for i := 1; i <= len1; i++ {
+			substitutionCost := 0
+			if s1[i-1] != s2[j-1] {
+				substitutionCost = 1
+			}
+
+			current := column[i]
+			column[i] = min(
+				column[i]+1,
+				min(
+					column[i-1]+1,
+					diagonalUpLeft+substitutionCost,
+				),
+			)
+
+			diagonalUpLeft = current
+		}
+
+		if column[1] > max {
+			return max + 1
+		}
+	}
+
+	return column[len1]
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func countDigitChanges(s1, s2 string) int {
+	count := 0
+	minLen := len(s1)
+	if len(s2) < minLen {
+		minLen = len(s2)
+	}
+
+	for i := 0; i < minLen; i++ {
+		if isDigitByte(s1[i]) && isDigitByte(s2[i]) && s1[i] != s2[i] {
+			count++
+		}
+	}
+
+	return count
+}
+
 // detectDuplicatePhysicalIndices detects duplicate PhysicalIndex values in TOC items
-func (mp *MetaProcessor) detectDuplicatePhysicalIndices(items []TOCItem) map[int][]string {
-	duplicates := make(map[int][]string)
-	physicalIndexMap := make(map[int][]string)
+// func (mp *MetaProcessor) detectDuplicatePhysicalIndices(items []TOCItem) map[int][]string {
+// 	duplicates := make(map[int][]string)
+// 	physicalIndexMap := make(map[int][]string)
 
-	for _, item := range items {
-		if item.PhysicalIndex != nil {
-			idx := *item.PhysicalIndex
-			physicalIndexMap[idx] = append(physicalIndexMap[idx], item.Title)
-		}
+// 	for _, item := range items {
+// 		if item.PhysicalIndex != nil {
+// 			idx := *item.PhysicalIndex
+// 			physicalIndexMap[idx] = append(physicalIndexMap[idx], item.Title)
+// 		}
+// 	}
+
+// 	for idx, titles := range physicalIndexMap {
+// 		if len(titles) > 1 {
+// 			duplicates[idx] = titles
+// 		}
+// 	}
+
+// 	return duplicates
+// }
+
+func isDigitByte(c byte) bool {
+	return c >= '0' && c <= '9'
+}
+
+func titlesMatch(title1, title2 string) bool {
+	normalized1 := normalizeTitle(title1)
+	normalized2 := normalizeTitle(title2)
+
+	if normalized1 == normalized2 {
+		return true
 	}
 
-	for idx, titles := range physicalIndexMap {
-		if len(titles) > 1 {
-			duplicates[idx] = titles
-		}
+	maxDistance := 3
+	distance := levenshteinDistance(normalized1, normalized2, maxDistance)
+	if distance > maxDistance {
+		return false
 	}
 
-	return duplicates
+	digitChanges := countDigitChanges(normalized1, normalized2)
+	return digitChanges <= 1
 }

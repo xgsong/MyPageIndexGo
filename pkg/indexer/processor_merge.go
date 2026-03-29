@@ -47,6 +47,7 @@ func MergeNodes(groups []*document.Node) *document.Node {
 			if allChildren[i].EndPage >= nextStart {
 				allChildren[i].EndPage = nextStart - 1
 			}
+			adjustDescendantEndPages(allChildren[i], nextStart-1)
 		}
 	}
 
@@ -56,4 +57,16 @@ func MergeNodes(groups []*document.Node) *document.Node {
 	}
 
 	return merged
+}
+
+func adjustDescendantEndPages(node *document.Node, maxEndPage int) {
+	if node == nil {
+		return
+	}
+	if node.EndPage > maxEndPage {
+		node.EndPage = maxEndPage
+	}
+	for _, child := range node.Children {
+		adjustDescendantEndPages(child, maxEndPage)
+	}
 }

@@ -5,6 +5,13 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/rs/zerolog/log"
+)
+
+const (
+	minTOCAccuracy     = 0.6 // Accept TOC if 60%+ items verified
+	lowAccuracyWarning = 0.3 // Warn if accuracy below 30%
 )
 
 // verifyTOC verifies TOC accuracy using check_title_appearance approach.
@@ -25,7 +32,11 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 	}
 
 	if lastPhysicalIndex == 0 || lastPhysicalIndex < len(pageTexts)/2 {
-		return 0, nil, nil
+		log.Debug().
+			Int("lastPhysicalIndex", lastPhysicalIndex).
+			Int("totalPages", len(pageTexts)).
+			Msg("lastPhysicalIndex < totalPages/2, accepting TOC without verification")
+		return 1.0, items, nil
 	}
 
 	// Check all items concurrently using check_title_appearance
@@ -82,7 +93,33 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 
 	accuracy := float64(correctCount) / float64(checkedCount)
 
-	return accuracy, incorrectItems, nil
+	log.Debug().
+		Int("correctCount", correctCount).
+		Int("checkedCount", checkedCount).
+		Float64("accuracy", accuracy).
+		Msg("TOC verification complete")
+
+	switch {
+	case accuracy >= minTOCAccuracy:
+		log.Debug().
+			Int("incorrectCount", len(incorrectItems)).
+			Msg("TOC accuracy >= threshold, returning all items for fixing")
+		return accuracy, incorrectItems, nil
+
+	case accuracy >= lowAccuracyWarning:
+		log.Warn().
+			Float64("accuracy", accuracy).
+			Int("correctCount", correctCount).
+			Int("incorrectCount", len(incorrectItems)).
+			Msg("TOC accuracy borderline, returning all items without fixing")
+		return accuracy, incorrectItems, nil
+
+	default:
+		log.Warn().
+			Float64("accuracy", accuracy).
+			Msg("TOC accuracy too low, triggering fallback mode")
+		return accuracy, nil, nil
+	}
 }
 
 func (mp *MetaProcessor) fixIncorrectTOCWithRetries(ctx context.Context, items []TOCItem, pageTexts []string, incorrectItems []TOCItem, startIndex int, maxRetries int) ([]TOCItem, []TOCItem, error) {
