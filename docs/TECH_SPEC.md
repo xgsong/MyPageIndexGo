@@ -40,7 +40,7 @@ mypageindexgo/
 │   │   ├── markdown.go         # Markdown解析器实现
 │   │   ├── tree.go             # Node/IndexTree 数据结构
 │   │   ├── pdf_renderer.go      # PDF渲染为图片（OCR用）
-│   │   └── llama_cpp_ocr_client.go  # OCR客户端接口
+│   │   └── ocr_client.go          # OCRClient 接口定义
 │   ├── llm/
 │   │   ├── client.go           # LLMClient 接口定义
 │   │   ├── openai.go           # OpenAI GPT实现

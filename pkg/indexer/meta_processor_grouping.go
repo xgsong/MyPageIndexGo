@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/rs/zerolog/log"
 )
 
 // pageListToGroupText groups pages into text chunks with token-based limits.
@@ -46,7 +44,7 @@ func (mp *MetaProcessor) pageListToGroupText(pageTexts []string, startIndex int)
 
 	// Python averaging formula for uniform distribution
 	expectedPartsNum := (totalTokens + maxTokens - 1) / maxTokens // math.Ceil equivalent
-	averageTokensPerPart := ((totalTokens/expectedPartsNum) + maxTokens + 1) / 2
+	averageTokensPerPart := ((totalTokens / expectedPartsNum) + maxTokens + 1) / 2
 
 	overlapPage := 1
 	groups := make([]string, 0)
@@ -78,7 +76,6 @@ func (mp *MetaProcessor) pageListToGroupText(pageTexts []string, startIndex int)
 		groups = append(groups, currentGroup.String())
 	}
 
-	log.Info().Int("groups", len(groups)).Msg("Divided page_list to groups")
 	return groups
 }
 
@@ -174,7 +171,6 @@ Given Structure
 
 	response, err := mp.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to get page numbers from LLM")
 		return toc
 	}
 
@@ -187,7 +183,6 @@ Given Structure
 	}
 
 	if err := parseLLMJSONResponse(response, &result); err != nil {
-		log.Warn().Err(err).Msg("Failed to parse page number JSON")
 		return toc
 	}
 

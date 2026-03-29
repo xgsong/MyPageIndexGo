@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-
-	"github.com/rs/zerolog/log"
 )
 
 // verifyTOC verifies TOC accuracy using check_title_appearance approach.
@@ -56,7 +54,6 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 			itemCopy.ListIndex = idx
 			appears, err := ac.CheckTitleAppearance(ctx, itemCopy, pageTexts, startIndex)
 			if err != nil {
-				log.Warn().Err(err).Str("title", itemCopy.Title).Msg("Title appearance check failed")
 				return
 			}
 
@@ -84,7 +81,6 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 	}
 
 	accuracy := float64(correctCount) / float64(checkedCount)
-	log.Info().Float64("accuracy", accuracy).Int("correct", correctCount).Int("incorrect", len(incorrectItems)).Msg("TOC verification result")
 
 	return accuracy, incorrectItems, nil
 }

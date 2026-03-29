@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/xgsong/mypageindexgo/pkg/document"
@@ -22,6 +23,20 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		}
 	}
 
+	// CRITICAL FIX: Sort items by PhysicalIndex BEFORE EndPage calculation
+	// This ensures items are in page order, not structure order (1, 1.1, 1.2, 2...)
+	// Without this, EndPage calculation produces wrong results
+	sort.Slice(items, func(i, j int) bool {
+		// Items without PhysicalIndex go to the end
+		if items[i].PhysicalIndex == nil {
+			return false
+		}
+		if items[j].PhysicalIndex == nil {
+			return true
+		}
+		return *items[i].PhysicalIndex < *items[j].PhysicalIndex
+	})
+
 	// Second pass: Calculate end_index for each item
 	// Python: post_processing in utils.py:432-438
 	for i := range items {
@@ -33,9 +48,14 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 
 		if i < len(items)-1 && items[i+1].PhysicalIndex != nil {
 			nextPhysicalIndex := *items[i+1].PhysicalIndex
-			// By default, assume next item appears at the start of its page
-			// So current item ends at nextPhysicalIndex - 1
-			items[i].EndPage = nextPhysicalIndex - 1
+			// If next section starts on a later page, current ends at nextPhysicalIndex - 1
+			// If next section starts on the same page, current ends at the same page
+			if nextPhysicalIndex > startPage {
+				items[i].EndPage = nextPhysicalIndex - 1
+			} else {
+				// Same page, both sections are on this page
+				items[i].EndPage = startPage
+			}
 		} else {
 			// Last item
 			items[i].EndPage = totalPages // Page numbers are 1-based

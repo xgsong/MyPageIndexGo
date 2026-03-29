@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/language"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
@@ -44,8 +43,6 @@ func NewMetaProcessor(client llm.LLMClient, cfg *config.Config, docLanguage lang
 // Process processes pages according to the specified mode
 // Python: meta_processor in page_index.py:959-997
 func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode ProcessingMode, tocContent string, tocPageList []int, startIndex int) ([]TOCItem, error) {
-	log.Info().Str("mode", string(mode)).Int("start_index", startIndex).Msg("Starting meta processor")
-
 	var result []TOCItem
 	var err error
 
@@ -53,20 +50,16 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 	case ModeTOCWithPageNumbers:
 		result, err = mp.processTOCWithPageNumbers(ctx, pageTexts, tocContent, tocPageList, startIndex)
 		if err != nil {
-			log.Warn().Err(err).Msg("TOC with page numbers processing failed, falling back to TOC no page numbers mode")
 			return mp.Process(ctx, pageTexts, ModeTOCNoPageNumbers, tocContent, tocPageList, startIndex)
 		}
 	case ModeTOCNoPageNumbers:
 		result, err = mp.processTOCNoPageNumbers(ctx, pageTexts, tocContent, tocPageList, startIndex)
 		if err != nil {
-			log.Warn().Err(err).Msg("TOC without page numbers processing failed, falling back to no TOC mode")
 			return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
 		}
 	case ModeNoTOC:
 		result, err = mp.processNoTOC(ctx, pageTexts, startIndex, tocPageList, false)
 		if err != nil {
-			log.Warn().Err(err).Msg("No TOC processing failed, returning simple flat structure")
-			// Fallback to simplest possible structure: one item per page
 			return mp.generateSimpleFlatStructure(pageTexts, startIndex), nil
 		}
 	default:
@@ -86,47 +79,31 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 	// Verify TOC accuracy
 	accuracy, incorrectResults, err := mp.verifyTOC(ctx, pageTexts, result, startIndex)
 	if err != nil {
-		log.Warn().Err(err).Msg("TOC verification failed")
 		return result, nil
 	}
 
-	log.Info().
-		Str("mode", string(mode)).
-		Float64("accuracy", accuracy).
-		Int("incorrect_count", len(incorrectResults)).
-		Msg("TOC verification complete")
-
 	// Handle verification results
 	if accuracy == 1.0 && len(incorrectResults) == 0 {
-		// Perfect accuracy
 		return result, nil
 	}
 
 	if accuracy > 0.6 && len(incorrectResults) > 0 {
-		if mp.cfg.SkipTOCFix {
-			log.Info().Msg("Skipping TOC fix (SkipTOCFix=true)")
-		} else {
+		if !mp.cfg.SkipTOCFix {
 			fixedResult, _, err := mp.fixIncorrectTOCWithRetries(ctx, result, pageTexts, incorrectResults, startIndex, 3)
 			if err == nil {
 				return fixedResult, nil
 			}
-			log.Warn().Err(err).Msg("Failed to fix incorrect TOC")
 		}
 		return result, nil
 	}
 
 	// Accuracy too low, fallback to simpler mode
-	log.Warn().Float64("accuracy", accuracy).Str("current_mode", string(mode)).Msg("Accuracy too low, falling back")
-
 	switch mode {
 	case ModeTOCWithPageNumbers:
-		// Fallback to ModeTOCNoPageNumbers
 		return mp.Process(ctx, pageTexts, ModeTOCNoPageNumbers, tocContent, tocPageList, startIndex)
 	case ModeTOCNoPageNumbers:
-		// Fallback to ModeNoTOC
 		return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
 	case ModeNoTOC:
-		// Already at simplest mode
 		return result, nil
 	}
 
@@ -136,7 +113,6 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 // processTOCWithPageNumbers processes TOC with explicit page numbers
 // Python: process_toc_with_page_numbers in page_index.py:622-652
 func (mp *MetaProcessor) processTOCWithPageNumbers(ctx context.Context, pageTexts []string, tocContent string, tocPageList []int, startIndex int) ([]TOCItem, error) {
-	log.Info().Msg("Processing TOC with page numbers")
 
 	// Step 1: Transform raw TOC to structured JSON
 	tocItems, err := mp.tocDetector.extractTOCFromLLM(ctx, tocContent)
@@ -169,7 +145,6 @@ func (mp *MetaProcessor) processTOCWithPageNumbers(ctx context.Context, pageText
 
 	// Step 4: Apply offset to convert logical page to physical index
 	if offset != nil {
-		log.Info().Int("offset", *offset).Msg("Applying page offset")
 		for i := range tocItems {
 			if tocItems[i].Page != nil {
 				physicalIdx := *tocItems[i].Page + *offset
@@ -188,7 +163,6 @@ func (mp *MetaProcessor) processTOCWithPageNumbers(ctx context.Context, pageText
 // processTOCNoPageNumbers processes TOC without page numbers
 // Python: process_toc_no_page_numbers in page_index.py:597-618
 func (mp *MetaProcessor) processTOCNoPageNumbers(ctx context.Context, pageTexts []string, tocContent string, tocPageList []int, startIndex int) ([]TOCItem, error) {
-	log.Info().Msg("Processing TOC without page numbers")
 
 	// Step 1: Transform TOC to structured format
 	tocItems, err := mp.tocDetector.extractTOCFromLLM(ctx, tocContent)
@@ -225,18 +199,16 @@ func (mp *MetaProcessor) generateSimpleFlatStructure(pageTexts []string, startIn
 		items = append(items, TOCItem{
 			Structure:     fmt.Sprintf("%d", i+1),
 			Title:         title,
-			PhysicalIndex: &physicalIdx, // Use 1-based index matching Page.Number
-			AppearStart:   "yes",        // Each section starts at the beginning of the page
+			PhysicalIndex: &physicalIdx,
+			AppearStart:   "yes",
 		})
 	}
-	log.Info().Int("items", len(items)).Msg("Generated simple flat structure as fallback")
 	return items
 }
 
 // processNoTOC generates structure without TOC
 // Python: process_no_toc in page_index.py:576-595
 func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, startIndex int, tocPageList []int, pageIndexGiven bool) ([]TOCItem, error) {
-	log.Info().Msg("Processing without TOC")
 
 	// Only skip TOC pages if we have high confidence they are real TOC pages with page numbers
 	// If PageIndexGiven is false, the detected "TOC pages" are likely false positives
@@ -266,11 +238,9 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 			filteredTexts = pageTexts
 			actualStartIndex = startIndex
 		}
-		log.Info().Int("skipped_pages", len(skipPages)).Int("actual_start", actualStartIndex).Msg("Skipped TOC pages")
 
 		contentWithTags := buildContentWithTags(filteredTexts, actualStartIndex)
 		groupTexts := mp.splitContentIntoGroups(contentWithTags, mp.cfg.MaxTokensPerNode, mp.cfg.MaxPagesPerNode)
-		log.Info().Int("groups", len(groupTexts)).Msg("Content grouped")
 
 		if len(groupTexts) == 0 {
 			return nil, fmt.Errorf("no content to process")
@@ -281,10 +251,9 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 			return nil, fmt.Errorf("failed to generate initial TOC: %w", err)
 		}
 
-		for i, groupText := range groupTexts[1:] {
+		for _, groupText := range groupTexts[1:] {
 			additional, err := mp.generateTOCContinue(ctx, tocItems, groupText, actualStartIndex, mp.docLanguage)
 			if err != nil {
-				log.Warn().Err(err).Int("group", i+1).Msg("Failed to continue TOC generation")
 				continue
 			}
 			tocItems = mp.mergeTOCItems(tocItems, additional)
@@ -296,7 +265,6 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 	// No confident TOC found, process all pages
 	contentWithTags := buildContentWithTags(pageTexts, startIndex)
 	groupTexts := mp.splitContentIntoGroups(contentWithTags, mp.cfg.MaxTokensPerNode, mp.cfg.MaxPagesPerNode)
-	log.Info().Int("groups", len(groupTexts)).Msg("Content grouped")
 
 	if len(groupTexts) == 0 {
 		return nil, fmt.Errorf("no content to process")
@@ -307,10 +275,9 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 		return nil, fmt.Errorf("failed to generate initial TOC: %w", err)
 	}
 
-	for i, groupText := range groupTexts[1:] {
+	for _, groupText := range groupTexts[1:] {
 		additional, err := mp.generateTOCContinue(ctx, tocItems, groupText, startIndex, mp.docLanguage)
 		if err != nil {
-			log.Warn().Err(err).Int("group", i+1).Msg("Failed to continue TOC generation")
 			continue
 		}
 		tocItems = mp.mergeTOCItems(tocItems, additional)

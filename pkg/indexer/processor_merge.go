@@ -1,6 +1,8 @@
 package indexer
 
 import (
+	"sort"
+
 	"github.com/xgsong/mypageindexgo/pkg/document"
 )
 
@@ -15,21 +17,43 @@ func MergeNodes(groups []*document.Node) *document.Node {
 		return document.CloneNode(groups[0])
 	}
 
-	merged := document.NewNode("Document", 1, 0)
-	endPage := 0
+	allChildren := make([]*document.Node, 0)
+	minStartPage := groups[0].StartPage
+	maxEndPage := 0
 
 	for _, group := range groups {
-		merged.StartPage = min(group.StartPage, merged.StartPage)
-		endPage = max(group.EndPage, endPage)
+		if group.StartPage < minStartPage {
+			minStartPage = group.StartPage
+		}
+		if group.EndPage > maxEndPage {
+			maxEndPage = group.EndPage
+		}
 		if len(group.Children) > 0 {
 			for _, child := range group.Children {
-				merged.AddChild(document.CloneNode(child))
+				allChildren = append(allChildren, document.CloneNode(child))
 			}
 		} else {
-			merged.AddChild(document.CloneNode(group))
+			allChildren = append(allChildren, document.CloneNode(group))
 		}
 	}
 
-	merged.EndPage = endPage
+	sort.Slice(allChildren, func(i, j int) bool {
+		return allChildren[i].StartPage < allChildren[j].StartPage
+	})
+
+	for i := 0; i < len(allChildren); i++ {
+		if i < len(allChildren)-1 {
+			nextStart := allChildren[i+1].StartPage
+			if allChildren[i].EndPage >= nextStart {
+				allChildren[i].EndPage = nextStart - 1
+			}
+		}
+	}
+
+	merged := document.NewNode("Document", minStartPage, maxEndPage)
+	for _, child := range allChildren {
+		merged.AddChild(child)
+	}
+
 	return merged
 }

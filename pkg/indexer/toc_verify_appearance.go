@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 )
@@ -14,7 +13,7 @@ import (
 // AppearanceChecker checks if TOC items appear at the start of their pages.
 // Python: check_title_appearance_in_start_concurrent in page_index.py:74-101
 type AppearanceChecker struct {
-	llmClient         llm.LLMClient
+	llmClient           llm.LLMClient
 	skipAppearanceCheck bool
 }
 
@@ -25,7 +24,7 @@ func NewAppearanceChecker(client llm.LLMClient, cfg *config.Config) *AppearanceC
 		skipCheck = cfg.SkipAppearanceCheck
 	}
 	return &AppearanceChecker{
-		llmClient:         client,
+		llmClient:           client,
 		skipAppearanceCheck: skipCheck,
 	}
 }
@@ -113,10 +112,7 @@ Directly return the final JSON structure. Do not output anything else.`, title, 
 // Sets AppearStart field on each item: "yes" if section starts at beginning of page.
 // OPTIMIZED: If skipAppearanceCheck is true, skip LLM calls and set all to "yes".
 func (ac *AppearanceChecker) CheckAllItemsAppearanceInStart(ctx context.Context, items []TOCItem, pageTexts []string) []TOCItem {
-	log.Info().Int("items", len(items)).Msg("Checking title appearance in start concurrently")
-
 	if ac.skipAppearanceCheck {
-		log.Info().Msg("Skipping appearance check (SkipAppearanceCheck=true)")
 		for i := range items {
 			items[i].AppearStart = "yes"
 		}
@@ -163,7 +159,6 @@ func (ac *AppearanceChecker) CheckAllItemsAppearanceInStart(ctx context.Context,
 
 			result, err := ac.CheckTitleAppearanceInStart(ctx, t.title, t.text)
 			if err != nil {
-				log.Warn().Err(err).Str("title", t.title).Msg("Error checking start appearance")
 				result = "no"
 			}
 

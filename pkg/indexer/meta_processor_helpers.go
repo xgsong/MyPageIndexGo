@@ -22,8 +22,8 @@ func (mp *MetaProcessor) validateAndTruncatePhysicalIndices(items []TOCItem, tot
 		if items[i].PhysicalIndex != nil {
 			idx := *items[i].PhysicalIndex
 			// Ensure within bounds
-			if idx < startIndex {
-				idx = startIndex
+			if idx < 1 {
+				idx = 1
 			}
 			if idx > totalPages {
 				idx = totalPages
@@ -110,4 +110,25 @@ func (mp *MetaProcessor) calculatePageOffset(pairs []PageIndexPair) *int {
 		return &mostCommon
 	}
 	return nil
+}
+
+// detectDuplicatePhysicalIndices detects duplicate PhysicalIndex values in TOC items
+func (mp *MetaProcessor) detectDuplicatePhysicalIndices(items []TOCItem) map[int][]string {
+	duplicates := make(map[int][]string)
+	physicalIndexMap := make(map[int][]string)
+
+	for _, item := range items {
+		if item.PhysicalIndex != nil {
+			idx := *item.PhysicalIndex
+			physicalIndexMap[idx] = append(physicalIndexMap[idx], item.Title)
+		}
+	}
+
+	for idx, titles := range physicalIndexMap {
+		if len(titles) > 1 {
+			duplicates[idx] = titles
+		}
+	}
+
+	return duplicates
 }

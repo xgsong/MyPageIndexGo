@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/rs/zerolog/log"
 )
 
 // transformDotsToColon transforms dots like "....." to ": "
@@ -32,8 +30,6 @@ return the following JSON format:
 Directly return the final JSON structure. Do not output anything else.
 Please note: abstract, summary, notation list, figure list, table list, etc. are not table of contents.`, content)
 }
-
-
 
 // tocTransformerPrompt creates prompt for TOC transformation
 func tocTransformerPrompt(tocContent string) string {
@@ -150,7 +146,6 @@ func parseLLMJSONResponse(response string, target interface{}) error {
 					return nil
 				}
 			}
-			log.Error().Str("raw_response", originalResponse).Msg("JSON parsing failed")
 			return fmt.Errorf("failed to parse JSON: %w", err)
 		}
 	}
@@ -210,14 +205,11 @@ func (d *TOCDetector) detectTOCPage(ctx context.Context, content string) (bool, 
 
 	var result TOCPromptResult
 	if err := parseLLMJSONResponse(response, &result); err != nil {
-		log.Warn().Err(err).Str("response", response).Msg("Failed to parse TOC detection response")
 		return false, nil
 	}
 
 	return strings.ToLower(result.TOCDetected) == "yes", nil
 }
-
-
 
 // findTOCPages scans pages to find TOC pages starting from startPageIndex.
 // Python: find_toc_pages in page_index.py:341-366
@@ -240,16 +232,13 @@ func (d *TOCDetector) findTOCPagesPerPage(ctx context.Context, pages []string, m
 
 		isTOC, err := d.detectTOCPage(ctx, pages[i])
 		if err != nil {
-			log.Warn().Err(err).Int("page", i).Msg("TOC detection failed")
 			continue
 		}
 
 		if isTOC {
-			log.Info().Int("page", i).Msg("Page has TOC")
 			tocPages = append(tocPages, i)
 			lastPageWasTOC = true
 		} else if lastPageWasTOC {
-			log.Info().Int("page", i-1).Msg("Found last TOC page")
 			break
 		}
 	}
@@ -266,7 +255,6 @@ func (d *TOCDetector) CheckTOC(ctx context.Context, pages []string, tocCheckPage
 	}
 
 	if len(tocPages) == 0 {
-		log.Info().Msg("No TOC found")
 		return &TOCResult{
 			TOCContent:     "",
 			TOCPageList:    []int{},
@@ -275,10 +263,7 @@ func (d *TOCDetector) CheckTOC(ctx context.Context, pages []string, tocCheckPage
 		}, nil
 	}
 
-	log.Info().Msg("TOC found")
 	tocContent := d.extractTOCContent(pages, tocPages)
-
-	log.Info().Msg("Page index not found in any TOC")
 	return &TOCResult{
 		TOCContent:     tocContent,
 		TOCPageList:    tocPages,

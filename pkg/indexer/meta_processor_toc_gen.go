@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/language"
 )
 
@@ -46,25 +45,32 @@ func (mp *MetaProcessor) generateTOCInit(ctx context.Context, content string, st
 
 Extract a hierarchical tree structure from the given document content.
 
-CRITICAL PAGE NUMBER EXTRACTION:
-The document has pages marked with 【第X页开始】 and 【第X页结束】 tags.
+CRITICAL PAGE NUMBER EXTRACTION - HIGHEST PRIORITY:
+The document has pages marked with【第 X 页开始】 and【第 X 页结束】tags.
 Each section between these tags represents page X of the PDF.
 
 For example:
-【第1页开始】
+【第 1 页开始】
 content of page 1...
-【第1页结束】
+【第 1 页结束】
 
 IMPORTANT RULES:
-1. When "第一章" appears between 【第1页开始】 and 【第1页结束】, its page number is 1
-2. When "第二章" appears between 【第3页开始】 and 【第3页结束】, its page number is 3
+1. When "第一章" appears between【第 1 页开始】 and【第 1 页结束】, its page number is 1
+2. When "第二章" appears between【第 3 页开始】 and【第 3 页结束】, its page number is 3
 3. The page numbers may not be sequential - always look at the ACTUAL tag numbers
 4. DO NOT guess page numbers - use the tag numbers exactly
+5. CRITICAL: Extract page numbers EXACTLY as they appear in the tags - NO estimation, NO inference
+6. Before returning, VERIFY each physical_index matches the actual <physical_index_X> tag in the content
 
 DOCUMENT STRUCTURE:
 - Top-level sections: 1, 2, 3, ... (e.g., "第一章", "第二章")
 - Child sections: 1.1, 1.2, ... (e.g., "1.1", "1.2")
 - Top-level sections are FLAT siblings
+
+CRITICAL - RETURN ITEMS IN PAGE ORDER:
+- Sort sections by their physical_index (page number) in ASCENDING order
+- DO NOT return in structure order (1, 1.1, 1.2, 2...) - return in PAGE ORDER (1, 2, 3...)
+- This ensures correct page range calculation
 
 Return JSON:
 {
@@ -85,8 +91,6 @@ Document content:
 		return nil, err
 	}
 
-	log.Info().Str("response", response).Msg("LLM response for generateTOCInit")
-
 	var result TOCTransformerResult
 	if err := parseLLMJSONResponse(response, &result); err != nil {
 		return nil, err
@@ -105,7 +109,6 @@ Document content:
 		if physicalIndexStr != "" {
 			idx, err := convertPhysicalIndexToInt(physicalIndexStr)
 			if err != nil {
-				log.Warn().Int("item", i).Str("physical_index", physicalIndexStr).Err(err).Msg("Failed to parse physical_index, skipping")
 				continue
 			}
 			if idx > 0 {
@@ -143,16 +146,21 @@ CRITICAL REQUIREMENTS - MUST FOLLOW:
    - Top-level sections: 1, 2, 3, ... (e.g., "第一条", "第二条", "第三条")
    - Child of top-level: 1.1, 1.2, ... (e.g., "（一）", "（二）" which are 子条款 of 条)
    - Sub-sub-level: 1.1.1, 1.1.2, ... (e.g., nested content under 子条款)
-   - CRITICAL: 条(1, 2, 3...) are FLAT siblings - 条 2 is NOT a child of 条 1!
-   - Only （一）（二）... under 条 are children of that 条
+   - CRITICAL: 条 (1, 2, 3...) are FLAT siblings - 条 2 is NOT a child of 条 1!
+   - Only（一）（二）... under 条 are children of that 条
 5. Continue numbering from where the existing TOC left off
 6. Each structure value must be UNIQUE across the entire document
-7. CRITICAL - PAGE NUMBER ACCURACY:
+7. CRITICAL - PAGE NUMBER ACCURACY (HIGHEST PRIORITY):
    - The physical_index MUST match the ACTUAL page where the section STARTS in the document
-   - Look for <physical_index_X> tags in the content - extract the X value accurately
+   - Look for <physical_index_X> tags in the content - extract the X value EXACTLY
    - DO NOT guess or make up page numbers - only use page numbers explicitly marked in the content
    - Sequential sections (siblings) should have SEQUENTIAL or NON-OVERLAPPING page numbers
-8. Verify each extracted page number by checking it against the <physical_index_X> tag in the content
+   - Before returning, VERIFY each extracted page number against the <physical_index_X> tag
+8. CRITICAL - RETURN ITEMS IN PAGE ORDER:
+   - Sort ALL new sections by their physical_index (page number) in ASCENDING order
+   - DO NOT return in structure order (1, 2, 3...) - return in PAGE ORDER (page 5, page 8, page 12...)
+   - This is ESSENTIAL for correct page range calculation in downstream processing
+9. DUPLICATE CHECK: Before returning, verify NO two sections have the same physical_index
 
 Return in the following JSON format:
 {

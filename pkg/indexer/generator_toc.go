@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/document"
 	"github.com/xgsong/mypageindexgo/pkg/language"
 )
@@ -15,11 +13,6 @@ import (
 // This is the main entry point for PDF indexing with TOC detection and processing.
 // Python equivalent: tree_parser in page_index.py:1029-1063
 func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Document) (*document.IndexTree, error) {
-	startTime := time.Now()
-	log.Info().
-		Int("pages", len(doc.Pages)).
-		Str("language", doc.Language.Name).
-		Msg("Starting index generation with TOC")
 
 	// Store reference to original document for summary generation
 	g.doc = doc
@@ -27,7 +20,6 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	// Detect document language from first page sample
 	if doc.Language.Code == "" {
 		doc.Language = language.Detect(doc.GetFullText())
-		log.Info().Str("detected_language", doc.Language.Name).Msg("Detected document language")
 	}
 
 	// Create meta processor
@@ -51,7 +43,6 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	tocDetector := NewTOCDetector(g.llmClient)
 	tocResult, err := tocDetector.CheckTOC(ctx, pageTexts, g.cfg.TOCheckPageNum)
 	if err != nil {
-		log.Warn().Err(err).Msg("TOC detection failed, proceeding without TOC")
 		tocResult = &TOCResult{
 			TOCContent:     "",
 			TOCPageList:    []int{},
@@ -67,10 +58,8 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	var mode ProcessingMode
 	if tocResult.TOCContent != "" && strings.TrimSpace(tocResult.TOCContent) != "" && tocResult.PageIndexGiven {
 		mode = ModeTOCWithPageNumbers
-		log.Info().Msg("Processing mode: TOC with page numbers")
 	} else {
 		mode = ModeNoTOC
-		log.Info().Msg("Processing mode: No TOC (or TOC without page index)")
 	}
 
 	// Process document with meta processor
@@ -78,8 +67,6 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	if err != nil {
 		return nil, fmt.Errorf("meta processor failed: %w", err)
 	}
-
-	log.Info().Int("toc_items", len(items)).Msg("Meta processor complete")
 
 	// Python: add_preface_if_needed (utils.py:367-378)
 	items = addPrefaceIfNeeded(items)
@@ -102,8 +89,7 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	}
 
 	// Count total nodes
-	totalNodes := root.CountNodes()
-	log.Info().Int("total_nodes", totalNodes).Msg("Tree structure created")
+	root.CountNodes()
 
 	// Create the index tree
 	tree := document.NewIndexTree(root, len(doc.Pages))
@@ -111,20 +97,10 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 
 	// Generate summaries if enabled
 	if g.cfg.GenerateSummaries {
-		stepStart := time.Now()
-		log.Info().Int("nodes", totalNodes).Msg("Starting summary generation")
 		if err := g.generateAllSummaries(ctx, root); err != nil {
 			return nil, fmt.Errorf("failed to generate summaries: %w", err)
 		}
-		log.Info().
-			Dur("duration", time.Since(stepStart)).
-			Msg("Summary generation complete")
 	}
-
-	log.Info().
-		Dur("total_duration", time.Since(startTime)).
-		Int("total_nodes", totalNodes).
-		Msg("Index generation complete")
 
 	return tree, nil
 }
@@ -170,15 +146,8 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context,
 	}
 
 	// Check if node is large enough to split
-	// Python: end_index - start_index > max_page_num_each_node AND token_num >= max_token_num_each_node
-	if pageCount > g.cfg.MaxPagesPerNode && tokenNum >= g.cfg.MaxTokenNumEachNode {
-		log.Info().
-			Str("title", node.Title).
-			Int("start", node.StartPage).
-			Int("end", node.EndPage).
-			Int("tokens", tokenNum).
-			Msg("Processing large node recursively")
-
+	// Only process nodes that have more than one page to avoid infinite recursion
+	if pageCount > 1 && tokenNum >= g.cfg.MaxTokenNumEachNode {
 		// Get sub-pages
 		startIdx := node.StartPage - 1
 		endIdx := node.EndPage
@@ -191,6 +160,8 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context,
 		subPageTexts := pageTexts[startIdx:endIdx]
 
 		// Generate sub-structure
+		// processNoTOC will generate physical indices relative to the entire document
+		// because we pass the full pageTexts array to CheckAllItemsAppearanceInStart later
 		subItems, err := mp.processNoTOC(ctx, subPageTexts, node.StartPage, nil, false)
 		if err != nil || len(subItems) == 0 {
 			return
@@ -218,17 +189,11 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context,
 			childRoot := g.generateTreeFromTOC(validItems[1:], node.EndPage)
 			if childRoot != nil {
 				node.Children = childRoot.Children
-				if len(validItems) > 1 && validItems[1].PhysicalIndex != nil {
-					node.EndPage = *validItems[1].PhysicalIndex
-				}
 			}
 		} else {
 			childRoot := g.generateTreeFromTOC(validItems, node.EndPage)
 			if childRoot != nil {
 				node.Children = childRoot.Children
-				if validItems[0].PhysicalIndex != nil {
-					node.EndPage = *validItems[0].PhysicalIndex
-				}
 			}
 		}
 	}

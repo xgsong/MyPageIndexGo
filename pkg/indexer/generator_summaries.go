@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/document"
 	"github.com/xgsong/mypageindexgo/pkg/language"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
@@ -17,8 +15,6 @@ import (
 
 // generateAllSummaries generates summaries for all nodes in the tree.
 func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *document.Node) error {
-	startTime := time.Now()
-
 	var nodesToProcess []*document.Node
 	var collect func(*document.Node)
 	collect = func(node *document.Node) {
@@ -37,8 +33,6 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 	if len(nodesToProcess) == 0 {
 		return nil
 	}
-
-	log.Info().Int("nodes_to_summarize", len(nodesToProcess)).Msg("Starting summary generation")
 
 	if g.cfg.EnableBatchCalls && len(nodesToProcess) > 1 {
 		return g.generateAllSummariesBatch(ctx, nodesToProcess)
@@ -71,14 +65,7 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 				}
 			}
 
-			newCount := completed.Add(1)
-			if newCount%10 == 0 || int(newCount) == len(nodesToProcess) {
-				log.Info().
-					Int32("completed", newCount).
-					Int("total", len(nodesToProcess)).
-					Dur("elapsed", time.Since(startTime)).
-					Msg("Summary generation progress")
-			}
+			completed.Add(1)
 			return nil
 		})
 	}
@@ -88,7 +75,6 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 
 // generateAllSummariesBatch processes nodes in batches.
 func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []*document.Node) error {
-	startTime := time.Now()
 	batchSize := g.cfg.BatchSize
 	if batchSize <= 0 {
 		batchSize = 20
@@ -145,11 +131,6 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 		batches = append(batches, currentBatch)
 	}
 
-	log.Info().
-		Int("batches", len(batches)).
-		Int("batch_size", batchSize).
-		Msg("Summary batching configuration")
-
 	var completedBatches atomic.Int32
 
 	for _, batch := range batches {
@@ -204,13 +185,7 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 				nwt.node.Summary = resp.Summary
 			}
 
-			newCount := completedBatches.Add(1)
-			log.Info().
-				Int32("completed", newCount).
-				Int("total", len(batches)).
-				Dur("elapsed", time.Since(startTime)).
-				Msg("Batch summary progress")
-
+			completedBatches.Add(1)
 			return nil
 		})
 	}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/rs/zerolog/log"
 )
 
 // extractTOCContent extracts and cleans TOC content from pages
@@ -51,8 +49,6 @@ func (d *TOCDetector) checkTOCTransformationComplete(ctx context.Context, rawCon
 
 	return strings.ToLower(result.Completed) == "yes"
 }
-
-
 
 // extractTOCFromLLM extracts TOC structure from LLM response
 // Python: toc_transformer in page_index.py:273-336
@@ -139,7 +135,5 @@ func (d *TOCDetector) parseTOCTransformerResponse(response string) ([]TOCItem, e
 		items = append(items, item)
 	}
 
-	log.Info().Int("items", len(items)).Msg("Extracted TOC items from LLM")
 	return items, nil
 }
-

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/rs/zerolog/log"
 )
 
 // tocIndexExtractorPrompt creates prompt for adding physical index to TOC
@@ -65,7 +63,6 @@ func (d *TOCDetector) addPhysicalIndexToTOC(ctx context.Context, toc []TOCItem, 
 		physicalIndexStr := entry.GetPhysicalIndexAsString()
 		physicalIndex, err := convertPhysicalIndexToInt(physicalIndexStr)
 		if err != nil {
-			log.Warn().Err(err).Str("value", physicalIndexStr).Msg("Failed to convert physical index")
 			items = append(items, TOCItem{
 				Structure:     entry.Structure,
 				Title:         entry.Title,
@@ -80,6 +77,5 @@ func (d *TOCDetector) addPhysicalIndexToTOC(ctx context.Context, toc []TOCItem, 
 		}
 	}
 
-	log.Info().Int("items", len(items)).Msg("Added physical index to TOC items")
 	return items, nil
 }

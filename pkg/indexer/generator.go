@@ -3,9 +3,7 @@ package indexer
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
 	"github.com/xgsong/mypageindexgo/pkg/language"
@@ -90,19 +88,12 @@ func calculateOptimalBatchSize(nodeCount int, totalTokens int) (batchSize int, t
 // Generate generates a complete index tree from a parsed document.
 // It performs the full process: grouping → parallel structure generation → merging → (optional) summary generation.
 func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (*document.IndexTree, error) {
-	startTime := time.Now()
-	log.Info().
-		Int("pages", len(doc.Pages)).
-		Str("language", doc.Language.Name).
-		Msg("Starting index generation")
-
 	// Store reference to original document for summary generation
 	g.doc = doc
 
 	// Detect document language from first page sample
 	if doc.Language.Code == "" {
 		doc.Language = language.Detect(doc.GetFullText())
-		log.Info().Str("detected_language", doc.Language.Name).Msg("Detected document language")
 	}
 
 	// Precompute page text map for summary generation (1-based)
@@ -113,30 +104,20 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 	}
 
 	// Step 1: Group pages
-	stepStart := time.Now()
 	groups, err := g.pageGrouper.GroupPages(doc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to group pages: %w", err)
 	}
-	log.Info().
-		Int("groups", len(groups)).
-		Dur("duration", time.Since(stepStart)).
-		Msg("Page grouping complete")
 
 	if len(groups) == 0 {
 		return nil, fmt.Errorf("no content found in document")
 	}
 
 	// Step 2: Generate structure for each group in parallel
-	stepStart = time.Now()
 	nodes, err := g.generateStructures(ctx, groups)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate structures: %w", err)
 	}
-	log.Info().
-		Int("nodes", len(nodes)).
-		Dur("duration", time.Since(stepStart)).
-		Msg("Structure generation complete")
 
 	// Step 3: Merge all nodes into a single tree
 	root := MergeNodes(nodes)
@@ -145,8 +126,7 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 	}
 
 	// Count total nodes
-	totalNodes := root.CountNodes()
-	log.Info().Int("total_nodes", totalNodes).Msg("Tree structure created")
+	root.CountNodes()
 
 	// Step 4: Create the index tree
 	tree := document.NewIndexTree(root, len(doc.Pages))
@@ -154,20 +134,10 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 
 	// Step 5: Generate summaries if enabled
 	if g.cfg.GenerateSummaries {
-		stepStart = time.Now()
-		log.Info().Int("nodes", totalNodes).Msg("Starting summary generation")
 		if err := g.generateAllSummaries(ctx, root); err != nil {
 			return nil, fmt.Errorf("failed to generate summaries: %w", err)
 		}
-		log.Info().
-			Dur("duration", time.Since(stepStart)).
-			Msg("Summary generation complete")
 	}
-
-	log.Info().
-		Dur("total_duration", time.Since(startTime)).
-		Int("total_nodes", totalNodes).
-		Msg("Index generation complete")
 
 	return tree, nil
 }
