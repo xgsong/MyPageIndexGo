@@ -55,16 +55,16 @@ content of page 1...
 【第 1 页结束】
 
 IMPORTANT RULES:
-1. When "第一章" appears between【第 1 页开始】 and【第 1 页结束】, its page number is 1
-2. When "第二章" appears between【第 3 页开始】 and【第 3 页结束】, its page number is 3
+1. When "第一章" or "第一条" appears between【第 1 页开始】and【第 1 页结束】, its page number is 1
+2. When "第二章" or "第二条" appears between【第 3 页开始】and【第 3 页结束】, its page number is 3
 3. The page numbers may not be sequential - always look at the ACTUAL tag numbers
 4. DO NOT guess page numbers - use the tag numbers exactly
 5. CRITICAL: Extract page numbers EXACTLY as they appear in the tags - NO estimation, NO inference
 6. Before returning, VERIFY each physical_index matches the actual <physical_index_X> tag in the content
 
 DOCUMENT STRUCTURE:
-- Top-level sections: 1, 2, 3, ... (e.g., "第一章", "第二章")
-- Child sections: 1.1, 1.2, ... (e.g., "1.1", "1.2")
+- Top-level sections: 1, 2, 3, ... (e.g., "第一章", "第二章", OR "第一条", "第二条", "第三条")
+- Child sections: 1.1, 1.2, ... (e.g., "1.1", "1.2", OR "（一）", "（二）")
 - Top-level sections are FLAT siblings
 
 CRITICAL - RETURN ITEMS IN PAGE ORDER:
@@ -77,7 +77,7 @@ Return JSON:
     "table_of_contents": [
         {
             "structure": "1",
-            "title": "第一章...",
+            "title": "第一章... OR 第一条...",
             "physical_index": "1"
         }
     ]
