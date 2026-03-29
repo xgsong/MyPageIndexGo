@@ -114,7 +114,7 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 	}
 
 	// Step 2: Generate structure for each group in parallel
-	nodes, err := g.generateStructures(ctx, groups)
+	nodes, err := g.generateStructures(ctx, groups, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate structures: %w", err)
 	}
@@ -134,7 +134,7 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 
 	// Step 5: Generate summaries if enabled
 	if g.cfg.GenerateSummaries {
-		if err := g.generateAllSummaries(ctx, root); err != nil {
+		if err := g.generateAllSummaries(ctx, root, nil, 80, 100); err != nil {
 			return nil, fmt.Errorf("failed to generate summaries: %w", err)
 		}
 	}

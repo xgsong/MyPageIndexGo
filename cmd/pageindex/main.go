@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/schollz/progressbar/v3"
 	"github.com/urfave/cli/v2"
 
 	"github.com/xgsong/mypageindexgo/pkg/config"
@@ -211,11 +212,25 @@ func generateAction(c *cli.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
+	// Progress: 5 stages, each 20%
+	bar := progressbar.Default(100, "Generating index...")
+	progressCallback := func(done, total int, desc string) {
+		if total > 0 {
+			percent := int(float64(done) / float64(total) * 100)
+			bar.Set(percent)
+			bar.Describe(desc)
+		}
+	}
+	bar.Set(5)
+	bar.Describe("Initializing")
+
 	// Use GenerateWithTOC for better TOC-based indexing with deduplication
-	tree, err := generator.GenerateWithTOC(ctx, doc)
+	tree, err := generator.GenerateWithTOC(ctx, doc, progressCallback)
 	if err != nil {
 		return fmt.Errorf("failed to generate index: %w", err)
 	}
+
+	bar.Finish()
 
 	elapsed := time.Since(startTime)
 

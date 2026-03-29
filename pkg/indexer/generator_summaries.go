@@ -14,7 +14,7 @@ import (
 )
 
 // generateAllSummaries generates summaries for all nodes in the tree.
-func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *document.Node) error {
+func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *document.Node, progressCb ProgressCallback, startPercent, endPercent int) error {
 	var nodesToProcess []*document.Node
 	var collect func(*document.Node)
 	collect = func(node *document.Node) {
@@ -35,7 +35,7 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 	}
 
 	if g.cfg.EnableBatchCalls && len(nodesToProcess) > 1 {
-		return g.generateAllSummariesBatch(ctx, nodesToProcess)
+		return g.generateAllSummariesBatch(ctx, nodesToProcess, progressCb, startPercent, endPercent)
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -65,7 +65,12 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 				}
 			}
 
-			completed.Add(1)
+			newCount := int(completed.Add(1))
+			if progressCb != nil {
+				// Scale progress to the defined range
+				progress := startPercent + (newCount * (endPercent - startPercent) / len(nodesToProcess))
+				progressCb(progress, 100, "Generating summaries")
+			}
 			return nil
 		})
 	}
@@ -74,7 +79,7 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 }
 
 // generateAllSummariesBatch processes nodes in batches.
-func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []*document.Node) error {
+func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []*document.Node, progressCb ProgressCallback, startPercent, endPercent int) error {
 	batchSize := g.cfg.BatchSize
 	if batchSize <= 0 {
 		batchSize = 20
@@ -186,6 +191,10 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 			}
 
 			completedBatches.Add(1)
+			if progressCb != nil {
+				progress := startPercent + (int(completedBatches.Load()) * (endPercent - startPercent) / len(batches))
+				progressCb(progress, 100, "Generating summaries")
+			}
 			return nil
 		})
 	}

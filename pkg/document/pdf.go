@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/ledongthuc/pdf"
+	"github.com/rs/zerolog/log"
 )
 
 var pdfMagicNumber = []byte("%PDF-")
@@ -65,15 +66,24 @@ func (p *PDFParser) Parse(r io.Reader) (*Document, error) {
 		return nil, err
 	}
 
+	// Count empty pages to detect mixed-content PDFs
+	// Trigger OCR if all pages are empty or more than 50% are empty
 	hasText := false
+	emptyPageCount := 0
 	for _, page := range pages {
 		if strings.TrimSpace(page.Text) != "" {
 			hasText = true
-			break
+		} else {
+			emptyPageCount++
 		}
 	}
 
-	if !hasText && p.enableOCR && p.ocrClient != nil {
+	if p.ocrClient != nil && (!hasText || emptyPageCount > len(pages)/2) {
+		log.Info().
+			Int("total_pages", len(pages)).
+			Int("empty_pages", emptyPageCount).
+			Bool("has_text", hasText).
+			Msg("Triggering OCR for mixed-content PDF")
 		pages, err = p.extractWithOCR(context.Background(), buf)
 		if err != nil {
 			return nil, fmt.Errorf("OCR failed: %w", err)

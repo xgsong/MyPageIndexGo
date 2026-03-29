@@ -286,7 +286,7 @@ func TestGenerateAllSummaries_NoSummariesNeeded(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = gen.generateAllSummaries(ctx, root)
+	err = gen.generateAllSummaries(ctx, root, nil, 0, 100)
 	assert.NoError(t, err)
 
 	// Summaries should remain unchanged
@@ -350,7 +350,7 @@ func TestGenerateAllSummaries_GenerateAll(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = gen.generateAllSummaries(ctx, root)
+	err = gen.generateAllSummaries(ctx, root, nil, 0, 100)
 	assert.NoError(t, err)
 
 	// Should have called GenerateSummary 4 times for all 4 nodes
@@ -398,7 +398,7 @@ func TestGenerateAllSummaries_MissingPages(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = gen.generateAllSummaries(ctx, node)
+	err = gen.generateAllSummaries(ctx, node, nil, 0, 100)
 	assert.NoError(t, err)
 
 	assert.Equal(t, expectedSummary, node.Summary)
@@ -438,7 +438,7 @@ func TestGenerateAllSummaries_EmptyText(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = gen.generateAllSummaries(ctx, node)
+	err = gen.generateAllSummaries(ctx, node, nil, 0, 100)
 	assert.NoError(t, err)
 
 	// Should call GenerateSummary even with empty page text because of added newlines
@@ -664,6 +664,59 @@ func TestGenerateTreeFromTOC_HierarchyWithEndPageFix(t *testing.T) {
 	assert.Equal(t, "Section 1.3", sect1_3.Title)
 	assert.Equal(t, 4, sect1_3.StartPage)
 	assert.Equal(t, 5, sect1_3.EndPage) // Next item "2" starts at page 6, so EndPage = 6 - 1 = 5
+}
+
+func TestGenerateTreeFromTOC_OrphanedChildrenRelinked(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mockLLM := &MockLLMClient{}
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	items := []TOCItem{
+		{Title: "Section 1.1", Structure: "1.1", PhysicalIndex: ptrInt(1)},
+		{Title: "Chapter 1", Structure: "1", PhysicalIndex: ptrInt(2)},
+		{Title: "Section 1.2", Structure: "1.2", PhysicalIndex: ptrInt(2)},
+		{Title: "Chapter 2", Structure: "2", PhysicalIndex: ptrInt(4)},
+		{Title: "Section 2.1", Structure: "2.1", PhysicalIndex: ptrInt(3)},
+	}
+
+	root := gen.generateTreeFromTOC(items, 10)
+	assert.NotNil(t, root)
+	assert.Equal(t, 2, len(root.Children))
+
+	var chap1, chap2 *document.Node
+	for _, child := range root.Children {
+		if child.Title == "Chapter 1" {
+			chap1 = child
+		} else if child.Title == "Chapter 2" {
+			chap2 = child
+		}
+	}
+
+	assert.NotNil(t, chap1, "Chapter 1 should exist")
+	assert.NotNil(t, chap2, "Chapter 2 should exist")
+	assert.Equal(t, 2, len(chap1.Children), "Chapter 1 should have 2 sections")
+	assert.Equal(t, 1, len(chap2.Children), "Chapter 2 should have 1 section")
+
+	var has1_1, has1_2, has2_1 bool
+	for _, child := range chap1.Children {
+		if child.Title == "Section 1.1" {
+			has1_1 = true
+			assert.Equal(t, 1, child.StartPage)
+		} else if child.Title == "Section 1.2" {
+			has1_2 = true
+		}
+	}
+	assert.True(t, has1_1, "Chapter 1 should have Section 1.1")
+	assert.True(t, has1_2, "Chapter 1 should have Section 1.2")
+
+	for _, child := range chap2.Children {
+		if child.Title == "Section 2.1" {
+			has2_1 = true
+			assert.Equal(t, 3, child.StartPage)
+		}
+	}
+	assert.True(t, has2_1, "Chapter 2 should have Section 2.1")
 }
 
 func ptrInt(i int) *int {

@@ -7,6 +7,69 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/document"
 )
 
+// extractContentPreview extracts a preview from the page text for a node.
+// Returns the first meaningful content (up to maxChars) from the node's page range.
+func extractContentPreview(pageTextMap map[int]string, startPage, endPage int, maxChars int) string {
+	if pageTextMap == nil || startPage > endPage {
+		return ""
+	}
+
+	var content strings.Builder
+	charsCollected := 0
+
+	for pageNum := startPage; pageNum <= endPage && charsCollected < maxChars; pageNum++ {
+		if text, ok := pageTextMap[pageNum]; ok && text != "" {
+			// Skip TOC pages (usually have little meaningful content)
+			trimmed := strings.TrimSpace(text)
+			if len(trimmed) < 50 {
+				continue
+			}
+
+			remaining := maxChars - charsCollected
+			if len(text) <= remaining {
+				content.WriteString(text)
+				charsCollected += len(text)
+			} else {
+				content.WriteString(text[:remaining])
+				charsCollected = maxChars
+			}
+
+			if charsCollected < maxChars {
+				content.WriteString(" ")
+			}
+		}
+	}
+
+	preview := strings.TrimSpace(content.String())
+	if len(preview) > maxChars {
+		// Truncate at word boundary if possible
+		if lastSpace := strings.LastIndex(preview[:maxChars], " "); lastSpace > maxChars/2 {
+			preview = preview[:lastSpace] + "..."
+		} else {
+			preview = preview[:maxChars-3] + "..."
+		}
+	} else if preview != "" {
+		preview += "..."
+	}
+
+	return preview
+}
+
+// enrichTitleWithPreview enriches a node title with content preview if title is too brief.
+func enrichTitleWithPreview(title string, preview string) string {
+	if preview == "" {
+		return title
+	}
+
+	// If title is already descriptive (>20 chars), don't enrich
+	if len(title) > 20 {
+		return title
+	}
+
+	// Enrich title with preview
+	return title + ": " + preview
+}
+
 // generateTreeFromTOC generates a tree structure from TOC items
 // Python equivalent: post_processing + list_to_tree in utils.py:319-358, 428-447
 // This is a simplified version that directly mirrors the Python implementation
@@ -70,12 +133,10 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 	}
 
 	// Third pass: Build tree structure
-	// Python: list_to_tree in utils.py:327-353
 	nodes := make(map[string]*document.Node)
 	var rootNodes []*document.Node
 
 	for _, item := range items {
-		// Skip duplicate structures (keep first occurrence)
 		if _, exists := nodes[item.Structure]; exists {
 			continue
 		}
@@ -85,27 +146,52 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 			startPage = *item.PhysicalIndex
 		}
 
-		node := document.NewNode(item.Title, startPage, item.EndPage)
+		preview := extractContentPreview(g.pageTextMap, startPage, item.EndPage, 100)
+		enrichedTitle := enrichTitleWithPreview(item.Title, preview)
+
+		node := document.NewNode(enrichedTitle, startPage, item.EndPage)
 		nodes[item.Structure] = node
 
-		// Find parent
 		parentStructure := getParentStructure(item.Structure)
 
 		if parentStructure != "" {
-			// Add as child to parent if parent exists
 			if parent, ok := nodes[parentStructure]; ok {
 				parent.AddChild(node)
 			} else {
-				// Parent not found yet, add to root nodes temporarily
 				rootNodes = append(rootNodes, node)
 			}
 		} else {
-			// No parent, this is a root node
 			rootNodes = append(rootNodes, node)
 		}
 	}
 
-	// Clean empty children arrays (Python: clean_node in utils.py:356-362)
+	structureForNode := make(map[*document.Node]string, len(nodes))
+	for structure, node := range nodes {
+		structureForNode[node] = structure
+	}
+
+	for i := 0; i < len(rootNodes); {
+		node := rootNodes[i]
+		nodeStructure := structureForNode[node]
+
+		if nodeStructure == "" {
+			i++
+			continue
+		}
+
+		parentStructure := getParentStructure(nodeStructure)
+
+		if parentStructure != "" {
+			if parent, ok := nodes[parentStructure]; ok {
+				parent.AddChild(node)
+				rootNodes[i] = rootNodes[len(rootNodes)-1]
+				rootNodes = rootNodes[:len(rootNodes)-1]
+				continue
+			}
+		}
+		i++
+	}
+
 	var cleanNode func(n *document.Node)
 	cleanNode = func(n *document.Node) {
 		if len(n.Children) == 0 {

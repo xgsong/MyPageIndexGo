@@ -10,8 +10,10 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/document"
 )
 
+type ProgressCallback func(done, total int, desc string)
+
 // generateStructures generates the tree structure for each page group in parallel.
-func (g *IndexGenerator) generateStructures(ctx context.Context, groups []*PageGroup) ([]*document.Node, error) {
+func (g *IndexGenerator) generateStructures(ctx context.Context, groups []*PageGroup, progressCb ProgressCallback) ([]*document.Node, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.SetLimit(g.cfg.MaxConcurrency)
 
@@ -32,7 +34,10 @@ func (g *IndexGenerator) generateStructures(ctx context.Context, groups []*PageG
 			}
 			nodes[i] = node
 
-			completed.Add(1)
+			newCount := int(completed.Add(1))
+			if progressCb != nil {
+				progressCb(newCount, len(groups), "Generating structure")
+			}
 			return nil
 		})
 	}
