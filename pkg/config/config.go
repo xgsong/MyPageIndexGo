@@ -35,7 +35,7 @@ func DefaultConfig() *Config {
 		EnableBatchCalls:  true,
 		BatchSize:         20,
 		TOCheckPageNum:    20,
-		MaxTokenNumEachNode: 20000,
+		MaxTokenNumEachNode: 5000,
 		SkipTOCFix:          false,
 		SkipAppearanceCheck: false,
 	}

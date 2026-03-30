@@ -57,17 +57,8 @@ func extractContentPreview(pageTextMap map[int]string, startPage, endPage int, m
 
 // enrichTitleWithPreview enriches a node title with content preview if title is too brief.
 func enrichTitleWithPreview(title string, preview string) string {
-	if preview == "" {
-		return title
-	}
-
-	// If title is already descriptive (>20 chars), don't enrich
-	if len(title) > 20 {
-		return title
-	}
-
-	// Enrich title with preview
-	return title + ": " + preview
+	// Disable title enrichment to avoid long titles with invalid characters
+	return title
 }
 
 // generateTreeFromTOC generates a tree structure from TOC items

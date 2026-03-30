@@ -154,7 +154,8 @@ func abs(x int) int {
 	return x
 }
 
-func normalizeTitle(title string) string {
+// normalizeTitleForComparison normalizes title for string comparison (lowercase, no punctuation)
+func normalizeTitleForComparison(title string) string {
 	title = strings.TrimSpace(title)
 	title = strings.ToLower(title)
 	var result strings.Builder
@@ -166,6 +167,78 @@ func normalizeTitle(title string) string {
 	normalized := result.String()
 	normalized = strings.Join(strings.Fields(normalized), " ")
 	return normalized
+}
+
+// cleanTitleForOutput cleans title for output (removes newlines, invalid chars, truncates long titles)
+func cleanTitleForOutput(title string) string {
+	if title == "" {
+		return ""
+	}
+
+	// Remove all newline characters
+	title = strings.ReplaceAll(title, "\n", " ")
+	title = strings.ReplaceAll(title, "\r", " ")
+
+	// Truncate at first dash or bullet point that starts a new line
+	if idx := strings.Index(title, " - "); idx > 0 {
+		title = title[:idx]
+	}
+	if idx := strings.Index(title, " — "); idx > 0 {
+		title = title[:idx]
+	}
+
+	// Convert to rune array for safe UTF-8 handling
+	runes := []rune(title)
+	valid := make([]rune, 0, len(runes))
+	
+	// Remove invalid UTF-8 characters and replacement characters
+	for _, r := range runes {
+		if r == 0xFFFD || !unicode.IsPrint(r) { // Skip replacement char and non-printable chars
+			continue
+		}
+		valid = append(valid, r)
+	}
+
+	// Trim extra spaces from rune array
+	start := 0
+	for start < len(valid) && unicode.IsSpace(valid[start]) {
+		start++
+	}
+	end := len(valid) - 1
+	for end >= start && unicode.IsSpace(valid[end]) {
+		end--
+	}
+	if start > end {
+		return ""
+	}
+	valid = valid[start : end+1]
+
+	// Truncate long titles (max 30 runes/characters)
+	maxRunes := 30
+	if len(valid) > maxRunes {
+		// Try to truncate at last space before max length
+		truncateAt := maxRunes
+		for i := maxRunes - 1; i > maxRunes/2; i-- {
+			if unicode.IsSpace(valid[i]) || valid[i] == '、' || valid[i] == '，' || valid[i] == '：' {
+				truncateAt = i
+				break
+			}
+		}
+		valid = valid[:truncateAt]
+		
+		// Trim trailing punctuation and spaces
+		for len(valid) > 0 && (unicode.IsPunct(valid[len(valid)-1]) || unicode.IsSpace(valid[len(valid)-1])) {
+			valid = valid[:len(valid)-1]
+		}
+	}
+
+	// Convert back to string and final cleanup
+	title = string(valid)
+	title = strings.TrimSuffix(title, ":")
+	title = strings.TrimSuffix(title, "：")
+	title = strings.TrimSpace(title)
+
+	return title
 }
 
 func levenshteinDistance(s1, s2 string, max int) int {
@@ -271,8 +344,8 @@ func isDigitByte(c byte) bool {
 }
 
 func titlesMatch(title1, title2 string) bool {
-	normalized1 := normalizeTitle(title1)
-	normalized2 := normalizeTitle(title2)
+	normalized1 := normalizeTitleForComparison(title1)
+	normalized2 := normalizeTitleForComparison(title2)
 
 	if normalized1 == normalized2 {
 		return true

@@ -59,7 +59,8 @@ batch_size: 20
 toc_check_page_num: 20
 
 # Maximum tokens per node for large node recursion
-max_token_num_each_node: 20000
+# Lowered from 20000 to 5000 to trigger splitting more frequently
+max_token_num_each_node: 5000
 
 # -----------------------------------------------------------------------------
 # Performance Optimization

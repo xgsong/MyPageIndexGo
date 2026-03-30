@@ -65,7 +65,7 @@ func (d *TOCDetector) addPhysicalIndexToTOC(ctx context.Context, toc []TOCItem, 
 		if err != nil {
 			items = append(items, TOCItem{
 				Structure:     entry.Structure,
-				Title:         entry.Title,
+				Title:         cleanTitleForOutput(entry.Title),
 				PhysicalIndex: nil,
 			})
 		} else {

@@ -3,6 +3,7 @@ package indexer
 import (
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // mergeTOCItems merges additional TOC items into existing items with deduplication
@@ -59,7 +60,8 @@ func (mp *MetaProcessor) mergeTOCItems(existing, additional []TOCItem) []TOCItem
 
 // normalizeStructure normalizes a structure string to a consistent format
 // Removes leading/trailing spaces, normalizes multiple dots, removes leading zeros
-// Examples: " 1.1 " -> "1.1", "01.02" -> "1.2", "1.." -> "1."
+// Fixes common LLM errors: "31" -> "3.1", "321" -> "3.2.1", etc.
+// Examples: " 1.1 " -> "1.1", "01.02" -> "1.2", "31" -> "3.1", "1.." -> "1"
 func normalizeStructure(structure string) string {
 	if structure == "" {
 		return ""
@@ -67,6 +69,22 @@ func normalizeStructure(structure string) string {
 
 	// Trim spaces
 	structure = strings.TrimSpace(structure)
+
+	// Remove any non-digit characters except dots
+	cleaned := make([]rune, 0, len(structure))
+	for _, r := range structure {
+		if unicode.IsDigit(r) || r == '.' {
+			cleaned = append(cleaned, r)
+		}
+	}
+	structure = string(cleaned)
+
+	// Fix common LLM error: no dots between numbers (e.g., "31" -> "3.1", "321" -> "3.2.1")
+	if !strings.Contains(structure, ".") && len(structure) > 1 {
+		// Split into individual digits and join with dots
+		digits := strings.Split(structure, "")
+		structure = strings.Join(digits, ".")
+	}
 
 	// Split by dot
 	parts := strings.Split(structure, ".")
@@ -87,3 +105,5 @@ func normalizeStructure(structure string) string {
 
 	return strings.Join(normalized, ".")
 }
+
+

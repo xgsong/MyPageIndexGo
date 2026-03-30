@@ -38,12 +38,11 @@ func getLanguageInstructionForTOC(lang language.Language) string {
 // generateTOCInit generates initial TOC from first content group
 // Python: generate_toc_init in page_index.py:540-567
 func (mp *MetaProcessor) generateTOCInit(ctx context.Context, content string, startIndex int, lang language.Language) ([]TOCItem, error) {
-	// Create language-specific system message
 	languageInstruction := getLanguageInstructionForTOC(lang)
 
 	prompt := fmt.Sprintf(`%s
 
-Extract a hierarchical tree structure from the given document content.
+Extract a HIERARCHICAL tree structure from the given document content.
 
 CRITICAL PAGE NUMBER EXTRACTION - HIGHEST PRIORITY:
 The document has pages marked with【第 X 页开始】 and【第 X 页结束】tags.
@@ -60,28 +59,46 @@ IMPORTANT RULES:
 3. The page numbers may not be sequential - always look at the ACTUAL tag numbers
 4. DO NOT guess page numbers - use the tag numbers exactly
 5. CRITICAL: Extract page numbers EXACTLY as they appear in the tags - NO estimation, NO inference
-6. Before returning, VERIFY each physical_index matches the actual <physical_index_X> tag in the content
+6. Before returning, VERIFY each physical_index matches the actual page tag in the content
 
-DOCUMENT STRUCTURE:
-- Top-level sections: 1, 2, 3, ... (e.g., "第一章", "第二章", OR "第一条", "第二条", "第三条")
-- Child sections: 1.1, 1.2, ... (e.g., "1.1", "1.2", OR "（一）", "（二）")
-- Top-level sections are FLAT siblings
+CRITICAL - HIERARCHICAL STRUCTURE EXTRACTION:
+You MUST identify and extract ALL levels of the document hierarchy, not just top-level sections.
+
+STRUCTURE NUMBERING SYSTEM:
+- Level 1 (top-level): 1, 2, 3, ... (e.g., "第一章", "第二章", "第一条", "第二条")
+- Level 2 (children of level 1): 1.1, 1.2, 2.1, 2.2, ... (e.g., "1.1", "（一）", "（二）", "第一节")
+- Level 3 (children of level 2): 1.1.1, 1.1.2, ... (e.g., nested subsections)
+- Level 4+: Continue the pattern (1.1.1.1, etc.)
+
+HIERARCHY EXAMPLES:
+Example 1 - Chinese document:
+{
+    "table_of_contents": [
+        {"structure": "1", "title": "第一章 总论", "physical_index": "1"},
+        {"structure": "1.1", "title": "第一节 研究背景", "physical_index": "1"},
+        {"structure": "1.2", "title": "第二节 研究目的", "physical_index": "3"},
+        {"structure": "2", "title": "第二章 文献综述", "physical_index": "5"},
+        {"structure": "2.1", "title": "第一节 国内研究", "physical_index": "5"},
+        {"structure": "2.2", "title": "第二节 国外研究", "physical_index": "7"}
+    ]
+}
+
+Example 2 - Document with subsections:
+{
+    "table_of_contents": [
+        {"structure": "1", "title": "1. Introduction", "physical_index": "1"},
+        {"structure": "1.1", "title": "1.1 Background", "physical_index": "1"},
+        {"structure": "1.2", "title": "1.2 Objectives", "physical_index": "2"},
+        {"structure": "2", "title": "2. Methodology", "physical_index": "4"},
+        {"structure": "2.1", "title": "2.1 Data Collection", "physical_index": "4"},
+        {"structure": "2.2", "title": "2.2 Analysis", "physical_index": "6"}
+    ]
+}
 
 CRITICAL - RETURN ITEMS IN PAGE ORDER:
 - Sort sections by their physical_index (page number) in ASCENDING order
-- DO NOT return in structure order (1, 1.1, 1.2, 2...) - return in PAGE ORDER (1, 2, 3...)
+- DO NOT return in structure order (1, 1.1, 1.2, 2...) - return in PAGE ORDER
 - This ensures correct page range calculation
-
-Return JSON:
-{
-    "table_of_contents": [
-        {
-            "structure": "1",
-            "title": "第一章... OR 第一条...",
-            "physical_index": "1"
-        }
-    ]
-}
 
 Document content:
 %s`, languageInstruction, content)
@@ -100,7 +117,7 @@ Document content:
 	for i, entry := range result.TableOfContents {
 		items[i] = TOCItem{
 			Structure:   normalizeStructure(entry.Structure),
-			Title:       entry.Title,
+			Title:       cleanTitleForOutput(entry.Title),
 			ListIndex:   i,
 			AppearStart: "yes",
 		}
@@ -125,12 +142,11 @@ Document content:
 func (mp *MetaProcessor) generateTOCContinue(ctx context.Context, existingTOC []TOCItem, content string, startIndex int, lang language.Language) ([]TOCItem, error) {
 	existingJSON, _ := json.Marshal(existingTOC)
 
-	// Create language-specific system message
 	languageInstruction := getLanguageInstructionForTOC(lang)
 
 	prompt := fmt.Sprintf(`%s
 
-Continue extracting hierarchical tree structure from additional document content.
+Continue extracting HIERARCHICAL tree structure from additional document content.
 
 Existing TOC:
 %s
@@ -142,34 +158,36 @@ CRITICAL REQUIREMENTS - MUST FOLLOW:
 1. DO NOT return any sections that already exist in the Existing TOC above
 2. DO NOT repeat any structure numbers (e.g., if "7" exists, do NOT return "7" again)
 3. DO NOT repeat any section titles - extract only NEW sections not in Existing TOC
-4. Structure numbering for Chinese legal documents:
-   - Top-level sections: 1, 2, 3, ... (e.g., "第一条", "第二条", "第三条")
-   - Child of top-level: 1.1, 1.2, ... (e.g., "（一）", "（二）" which are 子条款 of 条)
-   - Sub-sub-level: 1.1.1, 1.1.2, ... (e.g., nested content under 子条款)
-   - CRITICAL: 条 (1, 2, 3...) are FLAT siblings - 条 2 is NOT a child of 条 1!
-   - Only（一）（二）... under 条 are children of that 条
-5. Continue numbering from where the existing TOC left off
-6. Each structure value must be UNIQUE across the entire document
-7. CRITICAL - PAGE NUMBER ACCURACY (HIGHEST PRIORITY):
-   - The physical_index MUST match the ACTUAL page where the section STARTS in the document
-   - Look for <physical_index_X> tags in the content - extract the X value EXACTLY
-   - DO NOT guess or make up page numbers - only use page numbers explicitly marked in the content
-   - Sequential sections (siblings) should have SEQUENTIAL or NON-OVERLAPPING page numbers
-   - Before returning, VERIFY each extracted page number against the <physical_index_X> tag
-8. CRITICAL - RETURN ITEMS IN PAGE ORDER:
-   - Sort ALL new sections by their physical_index (page number) in ASCENDING order
-   - DO NOT return in structure order (1, 2, 3...) - return in PAGE ORDER (page 5, page 8, page 12...)
-   - This is ESSENTIAL for correct page range calculation in downstream processing
-9. DUPLICATE CHECK: Before returning, verify NO two sections have the same physical_index
+
+CRITICAL - HIERARCHICAL STRUCTURE CONTINUATION:
+You MUST continue extracting ALL levels of the document hierarchy.
+
+STRUCTURE NUMBERING SYSTEM:
+- Level 1 (top-level): 1, 2, 3, ... (e.g., "第一章", "第一条")
+- Level 2 (children of level 1): 1.1, 1.2, 2.1, 2.2, ... (e.g., "第一节", "（一）", "（二）")
+- Level 3 (children of level 2): 1.1.1, 1.1.2, ... (e.g., nested subsections)
+- Level 4+: Continue the pattern (1.1.1.1, etc.)
+
+IMPORTANT: If Existing TOC ends with "2.1", new sections should continue appropriately:
+- If new content is a subsection of "2.1", use "2.1.1", "2.1.2", etc.
+- If new content is a sibling of "2.1", use "2.2", "2.3", etc.
+- If new content is a new top-level section, use "3", "4", etc.
+
+CRITICAL - PAGE NUMBER ACCURACY:
+- The physical_index MUST match the ACTUAL page where the section STARTS
+- Look for【第 X 页开始】tags in the content - extract the X value EXACTLY
+- DO NOT guess or make up page numbers
+
+CRITICAL - RETURN ITEMS IN PAGE ORDER:
+- Sort ALL new sections by their physical_index in ASCENDING order
+- DO NOT return in structure order - return in PAGE ORDER
 
 Return in the following JSON format:
 {
     "table_of_contents": [
-        {
-            "structure": "structure index (e.g., 1, 1.1, 2, 2.1)",
-            "title": "section title",
-            "physical_index": "<physical_index_X>"
-        }
+        {"structure": "2.2", "title": "section title", "physical_index": "8"},
+        {"structure": "2.2.1", "title": "subsection title", "physical_index": "8"},
+        {"structure": "3", "title": "new chapter", "physical_index": "10"}
     ]
 }
 
@@ -189,7 +207,7 @@ Return ONLY new sections. If all sections are already in Existing TOC, return an
 	for i, entry := range result.TableOfContents {
 		items[i] = TOCItem{
 			Structure: normalizeStructure(entry.Structure),
-			Title:     entry.Title,
+			Title:     cleanTitleForOutput(entry.Title),
 			ListIndex: len(existingTOC) + i,
 		}
 		// Convert interface{} to string first

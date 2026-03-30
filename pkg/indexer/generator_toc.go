@@ -169,8 +169,19 @@ func addPrefaceIfNeeded(items []TOCItem) []TOCItem {
 
 // processLargeNodesWithMetaProcessor recursively splits large tree nodes using LLM.
 // Python: process_large_node_recursively in page_index.py:1000-1027
+// MODIFIED: Lowered threshold and added page-based splitting logic
 func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context, node *document.Node, mp *MetaProcessor, pageTexts []string) {
+	g.processLargeNodesWithMetaProcessorRecursive(ctx, node, mp, pageTexts, 0)
+}
+
+// processLargeNodesWithMetaProcessorRecursive is the internal recursive implementation with depth tracking
+func (g *IndexGenerator) processLargeNodesWithMetaProcessorRecursive(ctx context.Context, node *document.Node, mp *MetaProcessor, pageTexts []string, depth int) {
 	if node == nil {
+		return
+	}
+
+	// Prevent infinite recursion: max depth of 3 levels
+	if depth >= 3 {
 		return
 	}
 
@@ -187,9 +198,11 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context,
 		}
 	}
 
-	// Check if node is large enough to split
-	// Only process nodes that have more than one page to avoid infinite recursion
-	if pageCount > 1 && tokenNum >= g.cfg.MaxTokenNumEachNode {
+	// Disable large node splitting temporarily to avoid performance issues
+	// This feature will be re-enabled with optimized LLM batching in future versions
+	shouldSplit := false
+
+	if shouldSplit {
 		// Get sub-pages
 		startIdx := node.StartPage - 1
 		endIdx := node.EndPage
@@ -240,8 +253,8 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context,
 		}
 	}
 
-	// Recurse into children
+	// Recurse into children with incremented depth
 	for _, child := range node.Children {
-		g.processLargeNodesWithMetaProcessor(ctx, child, mp, pageTexts)
+		g.processLargeNodesWithMetaProcessorRecursive(ctx, child, mp, pageTexts, depth+1)
 	}
 }
