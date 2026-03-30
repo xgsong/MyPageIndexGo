@@ -23,13 +23,19 @@ func TestDefaultConfig(t *testing.T) {
 func TestLoadFromEnv(t *testing.T) {
 	origKey := os.Getenv("OPENAI_API_KEY")
 
-	os.Setenv("OPENAI_API_KEY", "test-key-123")
+	if err := os.Setenv("OPENAI_API_KEY", "test-key-123"); err != nil {
+		t.Fatalf("Failed to set OPENAI_API_KEY: %v", err)
+	}
 
 	defer func() {
 		if origKey != "" {
-			os.Setenv("OPENAI_API_KEY", origKey)
+			if err := os.Setenv("OPENAI_API_KEY", origKey); err != nil {
+				t.Logf("Warning: Failed to restore OPENAI_API_KEY: %v", err)
+			}
 		} else {
-			os.Unsetenv("OPENAI_API_KEY")
+			if err := os.Unsetenv("OPENAI_API_KEY"); err != nil {
+				t.Logf("Warning: Failed to unset OPENAI_API_KEY: %v", err)
+			}
 		}
 	}()
 
@@ -45,14 +51,24 @@ func TestLoadFromEnv(t *testing.T) {
 func TestLoadFromEnv_RequiresAPIKey(t *testing.T) {
 	origKey1 := os.Getenv("OPENAI_API_KEY")
 	origKey2 := os.Getenv("OCR_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OCR_API_KEY")
+	
+	if err := os.Unsetenv("OPENAI_API_KEY"); err != nil {
+		t.Logf("Warning: Failed to unset OPENAI_API_KEY: %v", err)
+	}
+	if err := os.Unsetenv("OCR_API_KEY"); err != nil {
+		t.Logf("Warning: Failed to unset OCR_API_KEY: %v", err)
+	}
+	
 	defer func() {
 		if origKey1 != "" {
-			os.Setenv("OPENAI_API_KEY", origKey1)
+			if err := os.Setenv("OPENAI_API_KEY", origKey1); err != nil {
+				t.Logf("Warning: Failed to restore OPENAI_API_KEY: %v", err)
+			}
 		}
 		if origKey2 != "" {
-			os.Setenv("OCR_API_KEY", origKey2)
+			if err := os.Setenv("OCR_API_KEY", origKey2); err != nil {
+				t.Logf("Warning: Failed to restore OCR_API_KEY: %v", err)
+			}
 		}
 	}()
 
@@ -66,19 +82,31 @@ func TestLoadFromEnv_NonPrefixed(t *testing.T) {
 	origKey := os.Getenv("OPENAI_API_KEY")
 	origOcrKey := os.Getenv("OCR_API_KEY")
 
-	os.Setenv("OPENAI_API_KEY", "test-key-noprefix")
-	os.Setenv("OCR_API_KEY", "test-ocr-key")
+	if err := os.Setenv("OPENAI_API_KEY", "test-key-noprefix"); err != nil {
+		t.Fatalf("Failed to set OPENAI_API_KEY: %v", err)
+	}
+	if err := os.Setenv("OCR_API_KEY", "test-ocr-key"); err != nil {
+		t.Fatalf("Failed to set OCR_API_KEY: %v", err)
+	}
 
 	defer func() {
 		if origKey != "" {
-			os.Setenv("OPENAI_API_KEY", origKey)
+			if err := os.Setenv("OPENAI_API_KEY", origKey); err != nil {
+				t.Logf("Warning: Failed to restore OPENAI_API_KEY: %v", err)
+			}
 		} else {
-			os.Unsetenv("OPENAI_API_KEY")
+			if err := os.Unsetenv("OPENAI_API_KEY"); err != nil {
+				t.Logf("Warning: Failed to unset OPENAI_API_KEY: %v", err)
+			}
 		}
 		if origOcrKey != "" {
-			os.Setenv("OCR_API_KEY", origOcrKey)
+			if err := os.Setenv("OCR_API_KEY", origOcrKey); err != nil {
+				t.Logf("Warning: Failed to restore OCR_API_KEY: %v", err)
+			}
 		} else {
-			os.Unsetenv("OCR_API_KEY")
+			if err := os.Unsetenv("OCR_API_KEY"); err != nil {
+				t.Logf("Warning: Failed to unset OCR_API_KEY: %v", err)
+			}
 		}
 	}()
 
@@ -94,13 +122,20 @@ func TestLoadFromEnv_NonPrefixed(t *testing.T) {
 
 func TestLoadFromEnv_SensitiveOnly(t *testing.T) {
 	origKey := os.Getenv("OPENAI_API_KEY")
-	os.Setenv("OPENAI_API_KEY", "test-key-sensitive")
+	
+	if err := os.Setenv("OPENAI_API_KEY", "test-key-sensitive"); err != nil {
+		t.Fatalf("Failed to set OPENAI_API_KEY: %v", err)
+	}
 
 	defer func() {
 		if origKey != "" {
-			os.Setenv("OPENAI_API_KEY", origKey)
+			if err := os.Setenv("OPENAI_API_KEY", origKey); err != nil {
+				t.Logf("Warning: Failed to restore OPENAI_API_KEY: %v", err)
+			}
 		} else {
-			os.Unsetenv("OPENAI_API_KEY")
+			if err := os.Unsetenv("OPENAI_API_KEY"); err != nil {
+				t.Logf("Warning: Failed to unset OPENAI_API_KEY: %v", err)
+			}
 		}
 	}()
 

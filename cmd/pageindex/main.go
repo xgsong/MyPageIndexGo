@@ -180,7 +180,7 @@ func generateAction(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer file.Close() // nolint:errcheck // File cleanup in CLI command
 
 	doc, err := parser.Parse(file)
 	if err != nil {
@@ -217,12 +217,12 @@ func generateAction(c *cli.Context) error {
 	progressCallback := func(done, total int, desc string) {
 		if total > 0 {
 			percent := int(float64(done) / float64(total) * 100)
-			bar.Set(percent)
-			bar.Describe(desc)
+			bar.Set(percent)        // nolint:errcheck // Progress bar error non-critical
+			bar.Describe(desc) // nolint:errcheck // Progress bar error non-critical
 		}
 	}
-	bar.Set(5)
-	bar.Describe("Initializing")
+	bar.Set(5)           // nolint:errcheck // Progress bar error non-critical
+	bar.Describe("Initializing") // nolint:errcheck // Progress bar error non-critical
 
 	// Use GenerateWithTOC for better TOC-based indexing with deduplication
 	tree, err := generator.GenerateWithTOC(ctx, doc, progressCallback)
@@ -230,7 +230,7 @@ func generateAction(c *cli.Context) error {
 		return fmt.Errorf("failed to generate index: %w", err)
 	}
 
-	bar.Finish()
+	bar.Finish() // nolint:errcheck // Progress bar error non-critical
 
 	elapsed := time.Since(startTime)
 
@@ -407,7 +407,7 @@ func updateAction(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to open new document: %w", err)
 	}
-	defer file.Close()
+	defer file.Close() // nolint:errcheck // File cleanup in CLI command
 
 	newDoc, err := parser.Parse(file)
 	if err != nil {

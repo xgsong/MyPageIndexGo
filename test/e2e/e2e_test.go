@@ -51,7 +51,7 @@ func TestE2E_GenerateAndSearch(t *testing.T) {
 	inputPath := "../fixtures/test.md"
 	file, err := os.Open(inputPath)
 	require.NoError(t, err)
-	defer file.Close()
+	defer file.Close() // nolint:errcheck // Test cleanup, ignore errors
 
 	// Get parser for markdown
 	reg := document.DefaultRegistry()
@@ -81,8 +81,8 @@ func TestE2E_GenerateAndSearch(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "pageindex-e2e-*.json")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	tmpFile.Close()
+	defer os.Remove(tmpPath) // nolint:errcheck // Test cleanup, ignore errors
+	tmpFile.Close()          // nolint:errcheck // Test cleanup, ignore errors
 
 	err = output.SaveIndexTree(tree, tmpPath)
 	require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestE2E_GenerateAndSearch_PDF(t *testing.T) {
 	inputPath := "../fixtures/test.pdf"
 	file, err := os.Open(inputPath)
 	require.NoError(t, err)
-	defer file.Close()
+	defer file.Close() // nolint:errcheck // Test cleanup, ignore errors
 
 	// Get parser for PDF
 	reg := document.DefaultRegistry()
@@ -193,8 +193,8 @@ func TestE2E_GenerateAndSearch_PDF(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "pageindex-e2e-pdf-*.json")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	tmpFile.Close()
+	defer os.Remove(tmpPath) // nolint:errcheck // Test cleanup, ignore errors
+	tmpFile.Close()          // nolint:errcheck // Test cleanup, ignore errors
 
 	err = output.SaveIndexTree(tree, tmpPath)
 	require.NoError(t, err)

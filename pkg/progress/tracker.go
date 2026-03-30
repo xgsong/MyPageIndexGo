@@ -17,11 +17,11 @@ func New(total int64, description string) *Progress {
 }
 
 func (p *Progress) Add(n int) {
-	p.bar.Add(n)
+	p.bar.Add(n) // nolint:errcheck // Progress bar error non-critical
 }
 
 func (p *Progress) Set(current int64) {
-	p.bar.Set64(current)
+	p.bar.Set64(current) // nolint:errcheck // Progress bar error non-critical
 }
 
 func (p *Progress) SetDescription(desc string) {
@@ -29,7 +29,7 @@ func (p *Progress) SetDescription(desc string) {
 }
 
 func (p *Progress) Finish() {
-	p.bar.Finish()
+	p.bar.Finish() // nolint:errcheck // Progress bar error non-critical
 }
 
 type Tracker struct {
@@ -71,7 +71,6 @@ type Stage struct {
 	Start       int64
 	End         int64
 	Tracker     *Tracker
-	description string
 }
 
 type MultiStageTracker struct {
@@ -117,8 +116,8 @@ func (mst *MultiStageTracker) callback(done int64, total int64, desc string) {
 	stageRange := stage.End - stage.Start
 	currentVal := stage.Start + int64(stageProgress*float64(stageRange))
 
-	mst.bar.Set64(currentVal)
-	mst.bar.Describe(desc)
+	mst.bar.Set64(currentVal)        // nolint:errcheck // Progress bar error non-critical
+	mst.bar.Describe(desc) // nolint:errcheck // Progress bar error non-critical
 }
 
 func (mst *MultiStageTracker) NextStage() {
@@ -142,7 +141,7 @@ func (mst *MultiStageTracker) CurrentTracker() *Tracker {
 
 func (mst *MultiStageTracker) Finish() {
 	if mst.bar != nil {
-		mst.bar.Finish()
+		mst.bar.Finish() // nolint:errcheck // Progress bar error non-critical
 	}
 }
 

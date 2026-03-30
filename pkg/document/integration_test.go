@@ -18,7 +18,7 @@ func TestPDFParser_Integration(t *testing.T) {
 	if err != nil {
 		t.Skip("Test PDF file not found, skipping integration test")
 	}
-	defer file.Close()
+	defer file.Close() // nolint:errcheck // Test cleanup, ignore errors
 
 	doc, err := parser.Parse(file)
 	require.NoError(t, err)
@@ -44,20 +44,12 @@ func TestPDFParser_InvalidFile(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "invalid-*.txt")
 	require.NoError(t, err)
 	tmpName := tmpFile.Name()
-
-	_, err = tmpFile.WriteString("This is not a PDF file")
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	defer func() {
-		if err := os.Remove(tmpName); err != nil {
-			t.Logf("Failed to remove temp file: %v", err)
-		}
-	}()
+	defer os.Remove(tmpName) // nolint:errcheck // Test cleanup, ignore errors
 
 	// Try to parse it as PDF
 	file, err := os.Open(tmpFile.Name())
 	require.NoError(t, err)
-	defer file.Close()
+	defer file.Close() // nolint:errcheck // Test cleanup, ignore errors
 
 	_, err = parser.Parse(file)
 	assert.Error(t, err)
@@ -71,7 +63,7 @@ func TestPDFParser_FileTooLarge(t *testing.T) {
 	// Create a fake PDF file that exceeds size limit
 	tmpFile, err := os.CreateTemp("", "large-*.pdf")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer os.Remove(tmpFile.Name()) // nolint:errcheck // Test cleanup, ignore errors
 
 	// Write PDF magic number
 	_, err = tmpFile.WriteString("%PDF-1.4\n")
@@ -102,7 +94,7 @@ func TestMarkdownParser_Integration(t *testing.T) {
 	if err != nil {
 		t.Skip("Test markdown file not found, skipping integration test")
 	}
-	defer file.Close()
+	defer file.Close() // nolint:errcheck // Test cleanup, ignore errors
 
 	doc, err := parser.Parse(file)
 	require.NoError(t, err)

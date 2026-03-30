@@ -135,7 +135,7 @@ func TestPDFRenderer_RenderAllPages_Success(t *testing.T) {
 	if err != nil {
 		t.Skip("Cannot open test PDF, skipping")
 	}
-	defer doc.Close()
+	defer doc.Close() // nolint:errcheck // Test cleanup, ignore errors
 
 	ctx := context.Background()
 	images, err := renderer.RenderAllPages(ctx, doc, 1)
