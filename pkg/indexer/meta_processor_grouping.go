@@ -79,7 +79,7 @@ func (mp *MetaProcessor) pageListToGroupText(pageTexts []string, startIndex int)
 	return groups
 }
 
-func (mp *MetaProcessor) splitContentIntoGroups(content string, maxTokens int, overlapPages int) []string {
+func (mp *MetaProcessor) splitContentIntoGroups(content string, maxTokens int, _ int) []string {
 	maxChars := maxTokens * 4
 	groups := make([]string, 0)
 
@@ -134,7 +134,7 @@ func findValidBreakPoint(content string, maxChars int) int {
 // addPageNumberToTOC uses LLM to find where each TOC section appears in the content.
 // Python: add_page_number_to_toc in page_index.py:461-491
 // Passes the full existing structure so LLM fills in current part only.
-func (mp *MetaProcessor) addPageNumberToTOC(ctx context.Context, toc []TOCItem, content string, startIndex int) []TOCItem {
+func (mp *MetaProcessor) addPageNumberToTOC(ctx context.Context, toc []TOCItem, content string, _ int) []TOCItem {
 	if len(toc) == 0 {
 		return toc
 	}

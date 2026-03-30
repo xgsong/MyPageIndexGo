@@ -53,7 +53,7 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 			return mp.Process(ctx, pageTexts, ModeTOCNoPageNumbers, tocContent, tocPageList, startIndex)
 		}
 	case ModeTOCNoPageNumbers:
-		result, err = mp.processTOCNoPageNumbers(ctx, pageTexts, tocContent, tocPageList, startIndex)
+		result, err = mp.processTOCNoPageNumbers(ctx, pageTexts, tocContent, startIndex)
 		if err != nil {
 			return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
 		}
@@ -170,7 +170,7 @@ func (mp *MetaProcessor) processTOCWithPageNumbers(ctx context.Context, pageText
 
 // processTOCNoPageNumbers processes TOC without page numbers
 // Python: process_toc_no_page_numbers in page_index.py:597-618
-func (mp *MetaProcessor) processTOCNoPageNumbers(ctx context.Context, pageTexts []string, tocContent string, tocPageList []int, startIndex int) ([]TOCItem, error) {
+func (mp *MetaProcessor) processTOCNoPageNumbers(ctx context.Context, pageTexts []string, tocContent string, startIndex int) ([]TOCItem, error) {
 
 	// Step 1: Transform TOC to structured format
 	tocItems, err := mp.tocDetector.extractTOCFromLLM(ctx, tocContent)

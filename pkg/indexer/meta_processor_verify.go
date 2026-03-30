@@ -16,7 +16,8 @@ const (
 
 // verifyTOC verifies TOC accuracy using check_title_appearance approach.
 // Python: verify_toc in page_index.py:900-952
-func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, items []TOCItem, startIndex int) (float64, []TOCItem, error) {
+// Note: error return value is always nil, kept for interface compatibility
+func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, items []TOCItem, startIndex int) (float64, []TOCItem, error) { //nolint:unparam
 	if len(items) == 0 {
 		return 0, nil, nil
 	}
@@ -138,7 +139,7 @@ func (mp *MetaProcessor) fixIncorrectTOCWithRetries(ctx context.Context, items [
 	return currentItems, currentIncorrect, nil
 }
 
-func (mp *MetaProcessor) fixIncorrectTOC(ctx context.Context, items []TOCItem, pageTexts []string, startIndex int, incorrectItems []TOCItem) ([]TOCItem, []TOCItem, error) {
+func (mp *MetaProcessor) fixIncorrectTOC(ctx context.Context, items []TOCItem, pageTexts []string, startIndex int, incorrectItems []TOCItem) ([]TOCItem, []TOCItem, error) { //nolint:unparam // error return value is always nil, kept for interface compatibility
 	// Create set of incorrect indices
 	incorrectSet := make(map[int]bool)
 	for _, item := range incorrectItems {

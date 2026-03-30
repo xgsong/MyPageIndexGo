@@ -37,7 +37,7 @@ func getLanguageInstructionForTOC(lang language.Language) string {
 
 // generateTOCInit generates initial TOC from first content group
 // Python: generate_toc_init in page_index.py:540-567
-func (mp *MetaProcessor) generateTOCInit(ctx context.Context, content string, startIndex int, lang language.Language) ([]TOCItem, error) {
+func (mp *MetaProcessor) generateTOCInit(ctx context.Context, content string, _ int, lang language.Language) ([]TOCItem, error) {
 	languageInstruction := getLanguageInstructionForTOC(lang)
 
 	prompt := fmt.Sprintf(`%s
@@ -139,7 +139,7 @@ Document content:
 
 // generateTOCContinue continues TOC generation for additional content
 // Python: generate_toc_continue in page_index.py (implied)
-func (mp *MetaProcessor) generateTOCContinue(ctx context.Context, existingTOC []TOCItem, content string, startIndex int, lang language.Language) ([]TOCItem, error) {
+func (mp *MetaProcessor) generateTOCContinue(ctx context.Context, existingTOC []TOCItem, content string, _ int, lang language.Language) ([]TOCItem, error) {
 	existingJSON, _ := json.Marshal(existingTOC)
 
 	languageInstruction := getLanguageInstructionForTOC(lang)

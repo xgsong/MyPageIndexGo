@@ -21,7 +21,7 @@ func (mp *MetaProcessor) filterValidItems(items []TOCItem) []TOCItem {
 	return valid
 }
 
-func (mp *MetaProcessor) validateAndTruncatePhysicalIndices(items []TOCItem, totalPages int, startIndex int) []TOCItem {
+func (mp *MetaProcessor) validateAndTruncatePhysicalIndices(items []TOCItem, totalPages int, _ int) []TOCItem {
 	for i := range items {
 		if items[i].PhysicalIndex != nil {
 			idx := *items[i].PhysicalIndex
@@ -68,7 +68,7 @@ func (mp *MetaProcessor) samplePages(pageTexts []string, startIndex int, maxPage
 	return content.String()
 }
 
-func (mp *MetaProcessor) extractMatchingPagePairs(tocWithPages []TOCItem, tocWithPhysical []TOCItem, startIndex int) []PageIndexPair {
+func (mp *MetaProcessor) extractMatchingPagePairs(tocWithPages []TOCItem, tocWithPhysical []TOCItem, _ int) []PageIndexPair {
 	pairs := make([]PageIndexPair, 0)
 
 	for _, phyItem := range tocWithPhysical {

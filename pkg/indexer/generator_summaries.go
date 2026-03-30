@@ -14,7 +14,7 @@ import (
 )
 
 // generateAllSummaries generates summaries for all nodes in the tree.
-func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *document.Node, progressCb ProgressCallback, startPercent, endPercent int) error {
+func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *document.Node, progressCb ProgressCallback, startPercent, endPercent int) error { //nolint:unparam // endPercent always 100 by design
 	var nodesToProcess []*document.Node
 	var collect func(*document.Node)
 	collect = func(node *document.Node) {
