@@ -131,9 +131,6 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, pageTexts []string
 		return items[i].ListIndex < items[j].ListIndex
 	})
 
-	// Calculate EndPage based on same-level siblings within the same parent
-	// CRITICAL FIX: Handle cases where multiple siblings start on the same page
-	// In this case, we need to look ahead to find the next DIFFERENT page number
 	for i := range items {
 		if items[i].PhysicalIndex == nil {
 			continue
@@ -141,20 +138,23 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, pageTexts []string
 
 		startPage := *items[i].PhysicalIndex
 
-		// Find the next item with a DIFFERENT physical index
-		nextDifferentPage := -1
-		for j := i + 1; j < len(items); j++ {
-			if items[j].PhysicalIndex != nil && *items[j].PhysicalIndex > startPage {
-				nextDifferentPage = *items[j].PhysicalIndex
-				break
-			}
-		}
-
-		if nextDifferentPage > startPage {
-			items[i].EndPage = nextDifferentPage - 1
+		if g.pageTextMap != nil && len(g.pageTextMap) > 0 {
+			endPage := analyzeSectionEndPage(g.pageTextMap, startPage, items[i].Title, items)
+			items[i].EndPage = endPage
 		} else {
-			// No later page found, use total pages
-			items[i].EndPage = totalPages
+			nextDifferentPage := -1
+			for j := i + 1; j < len(items); j++ {
+				if items[j].PhysicalIndex != nil && *items[j].PhysicalIndex > startPage {
+					nextDifferentPage = *items[j].PhysicalIndex
+					break
+				}
+			}
+
+			if nextDifferentPage > startPage {
+				items[i].EndPage = nextDifferentPage - 1
+			} else {
+				items[i].EndPage = totalPages
+			}
 		}
 
 		if items[i].EndPage < startPage {
