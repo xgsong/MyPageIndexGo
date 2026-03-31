@@ -51,7 +51,18 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 				return fmt.Errorf("rate limiter wait failed: %w", err)
 			}
 
+			// Pre-calculate approximate size for efficiency
+			totalLen := 0
+			for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
+				if text, ok := g.pageTextMap[pageNum]; ok {
+					totalLen += len(text) + 2
+				}
+			}
+
 			var nodeText strings.Builder
+			if totalLen > 0 {
+				nodeText.Grow(totalLen)
+			}
 			for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
 				if text, ok := g.pageTextMap[pageNum]; ok {
 					nodeText.WriteString(text)
@@ -97,7 +108,18 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 	}
 	var nodesWithText []nodeWithText
 	for _, node := range nodes {
+		// Pre-calculate approximate size for efficiency
+		totalLen := 0
+		for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
+			if text, ok := g.pageTextMap[pageNum]; ok {
+				totalLen += len(text) + 2
+			}
+		}
+
 		var nodeText strings.Builder
+		if totalLen > 0 {
+			nodeText.Grow(totalLen)
+		}
 		for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
 			if text, ok := g.pageTextMap[pageNum]; ok {
 				nodeText.WriteString(text)

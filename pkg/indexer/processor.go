@@ -104,7 +104,15 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 
 		// Only use small document optimization if all pages fit within limit
 		if !anyPageTooLarge {
+			// Pre-calculate total size for efficiency
+			totalLen := 0
+			for _, pwt := range pagesWithTokens {
+				totalLen += len(pwt.page.Text) + 1
+			}
+
 			var allText strings.Builder
+			allText.Grow(totalLen)
+
 			totalTokens := 0
 			for i, pwt := range pagesWithTokens {
 				if i > 0 {
@@ -128,6 +136,9 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 	var currentText strings.Builder
 	var currentTokens int
 	var overlapBuffer []pageWithTokens
+
+	// Pre-allocate buffer for text building (estimate: 500 chars per page)
+	currentText.Grow(estimatedGroups * 500)
 
 	for i, pwt := range pagesWithTokens {
 		pageTokens := pwt.tokens

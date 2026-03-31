@@ -10,7 +10,18 @@ import (
 // Python: extract_toc_content in page_index.py:160-200 + toc_extractor in page_index.py:222-238
 // First concatenates raw content and transforms dots, then the caller may use LLM for further extraction
 func (d *TOCDetector) extractTOCContent(pages []string, tocPageIndices []int) string {
+	// Pre-calculate total size for efficiency
+	totalLen := 0
+	for _, idx := range tocPageIndices {
+		if idx < len(pages) {
+			totalLen += len(pages[idx]) + 1
+		}
+	}
+
 	var content strings.Builder
+	if totalLen > 0 {
+		content.Grow(totalLen)
+	}
 	for _, idx := range tocPageIndices {
 		if idx < len(pages) {
 			content.WriteString(pages[idx])

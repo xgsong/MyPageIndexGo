@@ -9,10 +9,26 @@ import (
 	"strings"
 )
 
+// Pre-compiled regular expressions for performance
+var (
+	// transformDotsToColon patterns
+	fiveDotsRegex      = regexp.MustCompile(`\.{5,}`)
+	dotSpaceRegex      = regexp.MustCompile(`(?:\. ){5,}\.?`)
+	
+	// parseLLMJSONResponse patterns
+	trailingCommaRegex = regexp.MustCompile(`,\s*([}\]])`)
+	unquotedKeyRegex   = regexp.MustCompile(`([{\s,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:`)
+	jsonExtractRegex   = regexp.MustCompile(`(?s)\{.*\}`)
+	arrayExtractRegex  = regexp.MustCompile(`(?s)\[.*\]`)
+	
+	// convertPhysicalIndexToInt patterns
+	chinesePageRegex = regexp.MustCompile(`第(\d+)页`)
+)
+
 // transformDotsToColon transforms dots like "....." to ": "
 func transformDotsToColon(text string) string {
-	text = regexp.MustCompile(`\.{5,}`).ReplaceAllString(text, ": ")
-	text = regexp.MustCompile(`(?:\. ){5,}\.?`).ReplaceAllString(text, ": ")
+	text = fiveDotsRegex.ReplaceAllString(text, ": ")
+	text = dotSpaceRegex.ReplaceAllString(text, ": ")
 	return text
 }
 
@@ -123,24 +139,22 @@ func parseLLMJSONResponse(response string, target interface{}) error {
 	// Try parsing
 	if err := json.Unmarshal([]byte(content), target); err != nil {
 		// Try cleaning trailing commas
-		cleaned := regexp.MustCompile(`,\s*([}\]])`).ReplaceAllString(content, "$1")
+		cleaned := trailingCommaRegex.ReplaceAllString(content, "$1")
 		if err2 := json.Unmarshal([]byte(cleaned), target); err2 != nil {
 			// Try to fix unquoted keys
-			cleaned = regexp.MustCompile(`([{\s,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:`).ReplaceAllString(cleaned, `$1"$2":`)
+			cleaned = unquotedKeyRegex.ReplaceAllString(cleaned, `$1"$2":`)
 			if err3 := json.Unmarshal([]byte(cleaned), target); err3 == nil {
 				return nil
 			}
 			// Last resort: try to extract JSON using regex
-			jsonRegex := regexp.MustCompile(`(?s)\{.*\}`)
-			matches := jsonRegex.FindString(originalResponse)
+			matches := jsonExtractRegex.FindString(originalResponse)
 			if matches != "" {
 				if err3 := json.Unmarshal([]byte(matches), target); err3 == nil {
 					return nil
 				}
 			}
 			// Try array regex
-			arrayRegex := regexp.MustCompile(`(?s)\[.*\]`)
-			matches = arrayRegex.FindString(originalResponse)
+			matches = arrayExtractRegex.FindString(originalResponse)
 			if matches != "" {
 				if err3 := json.Unmarshal([]byte(matches), target); err3 == nil {
 					return nil
@@ -161,7 +175,14 @@ func addPageTags(content string, pageIndex int) string {
 
 // buildContentWithTags builds document with page tags
 func buildContentWithTags(pages []string, startIndex int) string {
+	// Pre-calculate approximate size for efficiency (tags add ~50 chars per page)
+	totalLen := 0
+	for _, page := range pages {
+		totalLen += len(page) + 50
+	}
+
 	var content strings.Builder
+	content.Grow(totalLen)
 	for i, page := range pages {
 		pageNum := startIndex + i
 		content.WriteString(addPageTags(page, pageNum))
@@ -170,14 +191,19 @@ func buildContentWithTags(pages []string, startIndex int) string {
 }
 
 // convertPhysicalIndexToInt converts various formats to int
-// Supports: "<physical_index_5>", "physical_index_5", "5", "【第5页开始】"
+// Supports: "<physical_index_5>", "physical_index_5", "5", "【第 5 页开始】"
 func convertPhysicalIndexToInt(physicalIndex string) (int, error) {
 	physicalIndex = strings.TrimSpace(physicalIndex)
 
-	// Try to extract number from Chinese format 【第X页开始】
+	// Try to extract number from Chinese format【第 X 页开始】
 	if strings.Contains(physicalIndex, "第") && strings.Contains(physicalIndex, "页") {
-		re := regexp.MustCompile(`第(\d+)页`)
-		matches := re.FindStringSubmatch(physicalIndex)
+		// Remove Chinese brackets and text first
+		cleaned := strings.ReplaceAll(physicalIndex, "【", "")
+		cleaned = strings.ReplaceAll(cleaned, "】", "")
+		cleaned = strings.ReplaceAll(cleaned, "开始", "")
+		cleaned = strings.ReplaceAll(cleaned, "结束", "")
+		
+		matches := chinesePageRegex.FindStringSubmatch(cleaned)
 		if len(matches) >= 2 {
 			return strconv.Atoi(matches[1])
 		}
@@ -226,6 +252,12 @@ func (d *TOCDetector) findTOCPagesPerPage(ctx context.Context, pages []string, m
 	lastPageWasTOC := false
 
 	for i := startPageIndex; i < len(pages); i++ {
+		select {
+		case <-ctx.Done():
+			return tocPages, ctx.Err()
+		default:
+		}
+
 		if i >= maxPages && !lastPageWasTOC {
 			break
 		}

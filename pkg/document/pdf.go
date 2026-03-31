@@ -143,7 +143,19 @@ func extractTextFromPage(page pdf.Page) (string, error) {
 		return "", err
 	}
 
+	// Pre-calculate approximate size for efficiency
+	totalLen := 0
+	for _, row := range rows {
+		for _, word := range row.Content {
+			totalLen += len(word.S)
+		}
+		totalLen += 1 // for newline
+	}
+
 	var textBuilder strings.Builder
+	if totalLen > 0 {
+		textBuilder.Grow(totalLen)
+	}
 	for _, row := range rows {
 		for _, word := range row.Content {
 			textBuilder.WriteString(word.S)
@@ -166,7 +178,10 @@ func extractTextWithPlainText(page pdf.Page) (string, error) {
 
 // cleanExtractedText removes non-printable characters and normalizes text
 func cleanExtractedText(text string) string {
+	// Pre-allocate with same size as input (output will be <= input)
 	var result strings.Builder
+	result.Grow(len(text))
+
 	for _, r := range text {
 		// Keep printable characters, common whitespace, and Unicode letters
 		if unicode.IsPrint(r) || unicode.IsSpace(r) || unicode.IsLetter(r) {
