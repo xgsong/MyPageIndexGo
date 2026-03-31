@@ -32,6 +32,9 @@ func NewNode(title string, startPage, endPage int) *Node {
 // AddChild adds a child node to this node.
 func (n *Node) AddChild(child *Node) {
 	n.Children = append(n.Children, child)
+	if child.StartPage < n.StartPage || n.StartPage == 0 {
+		n.StartPage = child.StartPage
+	}
 	if child.EndPage > n.EndPage {
 		n.EndPage = child.EndPage
 	}

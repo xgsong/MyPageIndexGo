@@ -80,7 +80,7 @@ func (mp *MetaProcessor) pageListToGroupText(pageTexts []string, startIndex int)
 }
 
 func (mp *MetaProcessor) splitContentIntoGroups(content string, maxTokens int, _ int) []string {
-	maxChars := maxTokens * 4
+	maxChars := maxTokens * 3 // Reduced from 4 to 3 to avoid exceeding context window limits
 	groups := make([]string, 0)
 
 	for len(content) > 0 {

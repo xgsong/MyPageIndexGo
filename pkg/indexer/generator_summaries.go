@@ -113,6 +113,7 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 		maxTotalTokens = g.cfg.MaxTokensPerNode * 6
 	}
 
+	totalNodes := len(nodes)
 	type nodeWithText struct {
 		node   *document.Node
 		text   string
@@ -187,7 +188,7 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 		}
 	}
 
-	var completedBatches atomic.Int32
+	var completedNodes atomic.Int32
 
 	for _, batch := range batches {
 		batch := batch
@@ -233,20 +234,20 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 						return fmt.Errorf("failed to generate summary for node %s: %w", nwt.node.ID, err)
 					}
 					nwt.node.Summary = summary
-					continue
-				}
-				if resp.Error != "" {
+				} else if resp.Error != "" {
 					return fmt.Errorf("failed to generate summary for node %s: %s", nwt.node.ID, resp.Error)
+				} else {
+					nwt.node.Summary = resp.Summary
 				}
-				nwt.node.Summary = resp.Summary
+
+				// Update progress after each node is processed
+				newCount := int(completedNodes.Add(1))
+				if progressCb != nil {
+					progress := startPercent + (newCount * (endPercent - startPercent) / totalNodes)
+					progressCb(progress, 100, "Generating summaries")
+				}
 			}
 
-			completedBatches.Add(1)
-			if progressCb != nil {
-				// Use integer arithmetic for better performance
-				progress := startPercent + (int(completedBatches.Load()) * (endPercent - startPercent) / len(batches))
-				progressCb(progress, 100, "Generating summaries")
-			}
 			return nil
 		})
 	}

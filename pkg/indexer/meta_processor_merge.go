@@ -80,7 +80,8 @@ func normalizeStructure(structure string) string {
 	structure = string(cleaned)
 
 	// Fix common LLM error: no dots between numbers (e.g., "31" -> "3.1", "321" -> "3.2.1")
-	if !strings.Contains(structure, ".") && len(structure) > 1 {
+	// Only split if length > 2 to avoid breaking two-digit chapter numbers (e.g., "10" -> keep as "10")
+	if !strings.Contains(structure, ".") && len(structure) > 2 {
 		// Split into individual digits and join with dots
 		digits := strings.Split(structure, "")
 		structure = strings.Join(digits, ".")

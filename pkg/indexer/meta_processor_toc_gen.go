@@ -60,9 +60,40 @@ IMPORTANT RULES:
 4. DO NOT guess page numbers - use the tag numbers exactly
 5. CRITICAL: Extract page numbers EXACTLY as they appear in the tags - NO estimation, NO inference
 6. Before returning, VERIFY each physical_index matches the actual page tag in the content
+7. CRITICAL FOR SUBSECTIONS: If section 1.1 starts on page 1 and 1.2 starts on page 1 but continues to page 2, mark 1.2 with physical_index: 1 (its START page)
+8. CRITICAL: Different subsections often start on DIFFERENT pages - do NOT assign the same page number to all subsections
+9. Look carefully: if 1.1 title appears on page 1, but 1.2 title appears on page 2, their physical_index MUST be different (1 vs 2)
 
 CRITICAL - HIERARCHICAL STRUCTURE EXTRACTION:
 You MUST identify and extract ALL levels of the document hierarchy, not just top-level sections.
+DO NOT MISS ANY SUBSECTIONS - even if a section appears short, include ALL its subsections.
+DO NOT MISS ANY SUBSECTIONS - even if a section appears short, include ALL its subsections.
+Extract ALL numbered sections (1.1, 1.2, 1.3, 1.4, ...) that appear in the content.
+Scrutinize the entire content carefully to ensure no subsection is omitted. Count the subsections to verify you have all of them.
+
+CRITICAL - SUBSECTION COMPLETENESS CHECK:
+Before returning, perform this verification:
+1. If you find sections 1.1 and 1.2, CHECK if there is a 1.3, 1.4, etc.
+2. Look for patterns like "1.3", "1.4", "第三节", "第四节" in the content
+3. Many documents have 3-5 subsections per chapter - do NOT stop at 1.2
+4. Missing subsections will cause incorrect page ranges - VERIFY completeness
+5. CRITICAL: Search the ENTIRE content for ALL numbered patterns - scan from beginning to end
+6. If you only find 2 subsections (1.1, 1.2), re-scan the content - there are likely more (1.3, 1.4, etc.)
+
+CRITICAL MARKDOWN HEADER DETECTION - FINAL VERIFICATION STEP:
+BEFORE returning your response, perform this FINAL scan:
+1. Search for ALL lines containing "### 数字。数字" pattern (e.g., "### 1.1", "### 1.2", "### 1.3")
+2. Search for ALL lines containing "### 第 [一二三四五] 节" pattern
+3. For EACH match, create a TOC entry - DO NOT SKIP ANY
+4. If you find "### 1.3" anywhere in the content, it MUST be in your TOC
+5. If "### 1.3" appears at the BOTTOM of a page, it is STILL VALID - include it with that page number
+
+CRITICAL - MARKDOWN FORMAT HEADERS:
+The document may use Markdown header format (###) for subsections:
+- "### 1.1 Title" or "### 1.2 Title" or "### 1.3 Title"
+- These MUST all be extracted as subsections at the same hierarchy level
+- Do NOT skip subsections that appear at the bottom of a page - they are valid sections
+- Even if the content is cut off at page boundary, the SECTION TITLE is still valid
 
 STRUCTURE NUMBERING SYSTEM:
 - Level 1 (top-level): 1, 2, 3, ... (e.g., "第一章", "第二章", "第一条", "第二条")
@@ -161,6 +192,19 @@ CRITICAL REQUIREMENTS - MUST FOLLOW:
 
 CRITICAL - HIERARCHICAL STRUCTURE CONTINUATION:
 You MUST continue extracting ALL levels of the document hierarchy.
+DO NOT MISS ANY SUBSECTIONS - even if a section appears short, include ALL its subsections.
+DO NOT MISS ANY SUBSECTIONS - even if a section appears short, include ALL its subsections.
+Extract ALL numbered sections (1.1, 1.2, 1.3, 1.4, ...) that appear in the content.
+Scrutinize the entire content carefully to ensure no subsection is omitted. Count the subsections to verify you have all of them.
+
+CRITICAL - SUBSECTION COMPLETENESS CHECK:
+Before returning, perform this verification:
+1. If you find sections 2.1 and 2.2, CHECK if there is a 2.3, 2.4, etc.
+2. Look for patterns like "2.3", "2.4", "第三节", "第四节" in the content
+3. Many documents have 3-5 subsections per chapter - do NOT stop at 2.2
+4. Missing subsections will cause incorrect page ranges - VERIFY completeness
+5. CRITICAL: Search the ENTIRE content for ALL numbered patterns - scan from beginning to end
+6. If you only find 2 subsections (2.1, 2.2), re-scan the content - there are likely more (2.3, 2.4, etc.)
 
 STRUCTURE NUMBERING SYSTEM:
 - Level 1 (top-level): 1, 2, 3, ... (e.g., "第一章", "第一条")
@@ -173,10 +217,20 @@ IMPORTANT: If Existing TOC ends with "2.1", new sections should continue appropr
 - If new content is a sibling of "2.1", use "2.2", "2.3", etc.
 - If new content is a new top-level section, use "3", "4", etc.
 
-CRITICAL - PAGE NUMBER ACCURACY:
-- The physical_index MUST match the ACTUAL page where the section STARTS
-- Look for【第 X 页开始】tags in the content - extract the X value EXACTLY
-- DO NOT guess or make up page numbers
+CRITICAL - PAGE NUMBER ACCURACY - MOST COMMON ERROR:
+The most common error is assigning the SAME page number to all subsections (e.g., 1.1, 1.2, 1.3 all get physical_index: 1).
+This is WRONG! Each subsection title appears on a SPECIFIC page - find that page!
+
+EXAMPLE OF CORRECT BEHAVIOR:
+- If "1.1 XXX" title appears on page 1 → physical_index: 1
+- If "1.2 YYY" title appears on page 1 (continued from previous) → physical_index: 1  
+- If "1.3 ZZZ" title appears on page 2 → physical_index: 2 (NOT 1!)
+- If "1.4 AAA" title appears on page 3 → physical_index: 3 (NOT 1!)
+
+BEFORE SUBMITTING, VERIFY:
+1. Do all subsections have the SAME physical_index? If yes, YOU MADE A MISTAKE - re-scan!
+2. Look at each subsection title individually - which page does it appear on?
+3. Use the【第 X 页开始】tags to find the EXACT page for each title
 
 CRITICAL - RETURN ITEMS IN PAGE ORDER:
 - Sort ALL new sections by their physical_index in ASCENDING order

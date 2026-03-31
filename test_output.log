@@ -1,14 +1,0 @@
-[90m2026-03-31T23:32:15+08:00[0m [32mINF[0m [1mOCR enabled for scanned PDFs[0m [36mmodel=[0mGLM-OCR-Q8_0
-[90m2026-03-31T23:32:15+08:00[0m [32mINF[0m [1mParsing PDF document[0m [36mfile=[0m./test/fixtures/test.pdf
-[90m2026-03-31T23:32:15+08:00[0m [32mINF[0m [1mDocument parsed successfully[0m [36mpages=[0m21
-[90m2026-03-31T23:32:15+08:00[0m [32mINF[0m [1mLLM cache enabled[0m [36msearch_cache=[0mfalse [36mttl=[0m3600000
-[90m2026-03-31T23:32:15+08:00[0m [32mINF[0m [1mGenerating index...[0m
-Generating index...   0% |                           | (0/100, 0 it/hr) [0s:0s][90m2026-03-31T23:32:26+08:00[0m [32mINF[0m [1mTOC detection complete[0m [36mmode=[0mprocess_no_toc [36mpage_index_given=[0mfalse [36mpage_texts=[0m21 [36mtoc_pages=[0m2
-                                                                               Detecting TOC  40% |████████████                   | (40/100, 4 it/s) [10s:15s][90m2026-03-31T23:33:27+08:00[0m [32mINF[0m [1mMeta processor complete[0m [36mmode=[0mprocess_no_toc [36mtoc_items=[0m40
-                                                                               Processing document structure  60% |███████      | (60/100, 2 it/s) [1m11s:19s]                                                                               Processing large sections 100% |█████████████████| (100/100, 1 it/s)
-                                                                               Processing large sections 100% |█████████████████| (100/100, 1 it/s)                                                                               Generating summaries 100% |█████████████████████| (90/100, 29 it/min)                                                                               Generating summaries 100% |████████████████████| (100/100, 25 it/min)
-✓ Index generation complete!
-  • Total pages: 21
-  • Total nodes: 41
-  • Time elapsed: 240.9s
-  • Output saved to: index.json

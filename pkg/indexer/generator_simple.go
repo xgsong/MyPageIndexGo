@@ -2,11 +2,48 @@ package indexer
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/xgsong/mypageindexgo/pkg/document"
 )
+
+func normalizeArabicToChinese(s string) string {
+	arabicToChinese := map[rune]rune{
+		'1': '一',
+		'2': '二',
+		'3': '三',
+		'4': '四',
+		'5': '五',
+		'6': '六',
+		'7': '七',
+		'8': '八',
+		'9': '九',
+	}
+
+	if s == "10" {
+		return "十"
+	}
+
+	if len(s) == 2 && s[0] == '1' {
+		return "十" + string(arabicToChinese[rune(s[1])])
+	}
+
+	if len(s) == 2 && s[1] == '0' {
+		return string(arabicToChinese[rune(s[0])]) + "十"
+	}
+
+	if len(s) == 2 {
+		return string(arabicToChinese[rune(s[0])]) + "十" + string(arabicToChinese[rune(s[1])])
+	}
+
+	if len(s) == 1 {
+		return string(arabicToChinese[rune(s[0])])
+	}
+
+	return s
+}
 
 // extractContentPreview extracts a preview from the page text for a node.
 // Returns the first meaningful content (up to maxChars) from the node's page range.
@@ -65,7 +102,7 @@ func enrichTitleWithPreview(title string, preview string) string {
 // generateTreeFromTOC generates a tree structure from TOC items
 // Python equivalent: post_processing + list_to_tree in utils.py:319-358, 428-447
 // This is a simplified version that directly mirrors the Python implementation
-func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *document.Node {
+func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, pageTexts []string, totalPages int) *document.Node {
 	if len(items) == 0 {
 		return nil
 	}
@@ -94,8 +131,9 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		return items[i].ListIndex < items[j].ListIndex
 	})
 
-	// Second pass: Calculate end_index for each item
-	// Python: post_processing in utils.py:432-438
+	// Calculate EndPage based on same-level siblings within the same parent
+	// CRITICAL FIX: Handle cases where multiple siblings start on the same page
+	// In this case, we need to look ahead to find the next DIFFERENT page number
 	for i := range items {
 		if items[i].PhysicalIndex == nil {
 			continue
@@ -103,22 +141,22 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 
 		startPage := *items[i].PhysicalIndex
 
-		if i < len(items)-1 && items[i+1].PhysicalIndex != nil {
-			nextPhysicalIndex := *items[i+1].PhysicalIndex
-			// If next section starts on a later page, current ends at nextPhysicalIndex - 1
-			// If next section starts on the same page, current ends at the same page
-			if nextPhysicalIndex > startPage {
-				items[i].EndPage = nextPhysicalIndex - 1
-			} else {
-				// Same page, both sections are on this page
-				items[i].EndPage = startPage
+		// Find the next item with a DIFFERENT physical index
+		nextDifferentPage := -1
+		for j := i + 1; j < len(items); j++ {
+			if items[j].PhysicalIndex != nil && *items[j].PhysicalIndex > startPage {
+				nextDifferentPage = *items[j].PhysicalIndex
+				break
 			}
-		} else {
-			// Last item
-			items[i].EndPage = totalPages // Page numbers are 1-based
 		}
 
-		// Clamp: end_page must be at least start_page
+		if nextDifferentPage > startPage {
+			items[i].EndPage = nextDifferentPage - 1
+		} else {
+			// No later page found, use total pages
+			items[i].EndPage = totalPages
+		}
+
 		if items[i].EndPage < startPage {
 			items[i].EndPage = startPage
 		}
@@ -143,7 +181,7 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		// If no real item comes, we'll generate a reasonable title from structure
 		placeholderNode := document.NewNode("", 1, totalPages)
 		nodes[structure] = placeholderNode
-		
+
 		// Recursively ensure grandparent exists
 		grandparentStructure := getParentStructure(structure)
 		if grandparentStructure != "" {
@@ -264,6 +302,68 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		cleanNode(node)
 	}
 
+	// Merge duplicate chapter nodes with matching Chinese numeral
+	chapterTitleToNode := make(map[string]*document.Node)
+	for _, node := range rootNodes {
+		if matches := regexp.MustCompile(`第(.+?)章`).FindStringSubmatch(node.Title); len(matches) > 1 {
+			chapterNum := strings.TrimSpace(matches[1])
+			if allArabic := func(s string) bool {
+				for _, r := range s {
+					if r < '0' || r > '9' {
+						return false
+					}
+				}
+				return true
+			}(chapterNum); allArabic {
+				chapterNum = normalizeArabicToChinese(chapterNum)
+			}
+			if existing, ok := chapterTitleToNode[chapterNum]; ok {
+				if len(node.Title) > len(existing.Title) {
+					chapterTitleToNode[chapterNum] = node
+				}
+			} else {
+				chapterTitleToNode[chapterNum] = node
+			}
+		}
+	}
+
+	deduplicatedRoots := make([]*document.Node, 0, len(rootNodes))
+	skippedNodes := make(map[*document.Node]bool)
+	for _, node := range rootNodes {
+		if skippedNodes[node] {
+			continue
+		}
+		if matches := regexp.MustCompile(`第(.+?)章`).FindStringSubmatch(node.Title); len(matches) > 1 {
+			chapterNum := strings.TrimSpace(matches[1])
+			if allArabic := func(s string) bool {
+				for _, r := range s {
+					if r < '0' || r > '9' {
+						return false
+					}
+				}
+				return true
+			}(chapterNum); allArabic {
+				chapterNum = normalizeArabicToChinese(chapterNum)
+			}
+			preferredNode := chapterTitleToNode[chapterNum]
+			if preferredNode != node {
+				for _, child := range node.Children {
+					preferredNode.AddChild(child)
+				}
+				if node.StartPage < preferredNode.StartPage {
+					preferredNode.StartPage = node.StartPage
+				}
+				if node.EndPage > preferredNode.EndPage {
+					preferredNode.EndPage = node.EndPage
+				}
+				skippedNodes[node] = true
+				continue
+			}
+		}
+		deduplicatedRoots = append(deduplicatedRoots, node)
+	}
+	rootNodes = deduplicatedRoots
+
 	// Python: post_processing fallback (utils.py:440-447)
 	// If list_to_tree returns empty, return flat structure
 	if len(rootNodes) == 0 {
@@ -278,6 +378,31 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 			root.AddChild(node)
 		}
 		return root
+	}
+
+	// Recalculate page ranges for all parent nodes based on their children
+	var recalculatePageRanges func(*document.Node) (int, int)
+	recalculatePageRanges = func(n *document.Node) (int, int) {
+		if len(n.Children) == 0 {
+			return n.StartPage, n.EndPage
+		}
+		firstMin, firstMax := recalculatePageRanges(n.Children[0])
+		minPage, maxPage := firstMin, firstMax
+		for _, child := range n.Children[1:] {
+			childMin, childMax := recalculatePageRanges(child)
+			if childMin < minPage {
+				minPage = childMin
+			}
+			if childMax > maxPage {
+				maxPage = childMax
+			}
+		}
+		n.StartPage = minPage
+		n.EndPage = maxPage
+		return minPage, maxPage
+	}
+	for _, node := range rootNodes {
+		recalculatePageRanges(node)
 	}
 
 	// If single root node, ensure its EndPage covers all descendants
@@ -313,6 +438,54 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 	}
 
 	return root
+}
+
+func scanAndAddMissingSubsections(tocItems []TOCItem, pageTexts []string, startIndex int) []TOCItem {
+	subsectionPattern := regexp.MustCompile(`###\s*(\d+\.\d+)\s*(.+)`)
+
+	existingItems := make(map[string]*TOCItem)
+	for i := range tocItems {
+		existingItems[tocItems[i].Structure] = &tocItems[i]
+	}
+
+	var addedItems []TOCItem
+
+	for pageNum, text := range pageTexts {
+		matches := subsectionPattern.FindAllStringSubmatch(text, -1)
+		for _, match := range matches {
+			if len(match) < 3 {
+				continue
+			}
+			structure := match[1]
+			title := strings.TrimSpace(match[2])
+			actualPage := pageNum + startIndex
+
+			if existing, found := existingItems[structure]; found {
+				if *existing.PhysicalIndex != actualPage {
+					existing.PhysicalIndex = &actualPage
+					existing.Page = &actualPage
+				}
+			} else {
+				addedItems = append(addedItems, TOCItem{
+					Structure:     structure,
+					Title:         title,
+					PhysicalIndex: &actualPage,
+					Page:          &actualPage,
+					ListIndex:     len(tocItems) + len(addedItems),
+				})
+				existingItems[structure] = &addedItems[len(addedItems)-1]
+			}
+		}
+	}
+
+	if len(addedItems) > 0 {
+		merged := make([]TOCItem, len(tocItems)+len(addedItems))
+		copy(merged, tocItems)
+		copy(merged[len(tocItems):], addedItems)
+		return merged
+	}
+
+	return tocItems
 }
 
 // getParentStructure gets the parent structure number

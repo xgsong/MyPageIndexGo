@@ -77,11 +77,28 @@ func (c *OpenAIClient) createChatCompletion(ctx context.Context, req openai.Chat
 	err := utils.DoRetry(ctx, utils.DefaultRetryConfig(), func() error {
 		// Prepend system message to force disable thinking/reasoning output
 		// This works for all LLMs regardless of API parameter support
-		systemMsg := openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: "IMPORTANT: Do NOT output any thinking/reasoning process, <think> tags, or chain-of-thought content. Directly output only the final result in the required format. Any thought content must be completely excluded from your response.",
+		systemContent := "IMPORTANT: Do NOT output any thinking/reasoning process, <think> tags, or chain-of-thought content. Directly output only the final result in the required format. Any thought content must be completely excluded from your response."
+		
+		if len(req.Messages) == 0 {
+			// No messages, add system message as first
+			req.Messages = []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: systemContent,
+				},
+			}
+		} else if req.Messages[0].Role == openai.ChatMessageRoleSystem {
+			// Already has a system message, merge our content into it
+			req.Messages[0].Content = systemContent + "\n" + req.Messages[0].Content
+		} else {
+			// No system message at beginning, prepend ours
+			req.Messages = append([]openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: systemContent,
+				},
+			}, req.Messages...)
 		}
-		req.Messages = append([]openai.ChatCompletionMessage{systemMsg}, req.Messages...)
 
 		// Disable streaming to ensure we get complete response
 		req.Stream = false

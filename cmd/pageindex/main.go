@@ -209,7 +209,7 @@ func generateAction(c *cli.Context) error {
 	log.Info().Msg("Generating index...")
 	startTime := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
 	defer cancel()
 
 	// Progress: 5 stages, each 20%

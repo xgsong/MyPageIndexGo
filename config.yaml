@@ -10,7 +10,7 @@
 openai_base_url: 'http://localhost:8081/v1'
 
 # Model name to use for generation
-openai_model: 'Qwen3.5-9B.Q4_K_M'
+openai_model: 'Qwen3.5-4B-UD-Q2_K_XL'
 
 # -----------------------------------------------------------------------------
 # OCR Configuration (for scanned PDF documents)
@@ -47,20 +47,20 @@ max_pages_per_node: 10
 max_tokens_per_node: 24000
 
 # Generate summaries for each index node
-generate_summaries: true
+generate_summaries: false
 
 # Enable batch LLM calls for summary generation
 enable_batch_calls: true
 
 # Number of summaries per batch call
-batch_size: 20
+batch_size: 30
 
 # Maximum pages to scan for TOC detection
 toc_check_page_num: 20
 
 # Maximum tokens per node for large node recursion
 # Lowered from 20000 to 5000 to trigger splitting more frequently
-max_token_num_each_node: 5000
+max_token_num_each_node: 16000
 
 # -----------------------------------------------------------------------------
 # Performance Optimization
@@ -75,7 +75,7 @@ skip_appearance_check: true
 # Cache Configuration
 # -----------------------------------------------------------------------------
 # Enable LLM response caching to reduce API calls
-enable_llm_cache: true
+enable_llm_cache: false
 
 # LLM cache TTL in seconds (0 means no expiration)
 llm_cache_ttl: 3600

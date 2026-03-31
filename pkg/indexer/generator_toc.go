@@ -68,7 +68,7 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	}
 
 	// Debug logging for OCR investigation
-	log.Info().
+	log.Debug().
 		Str("mode", string(mode)).
 		Int("toc_pages", len(tocResult.TOCPageList)).
 		Bool("page_index_given", tocResult.PageIndexGiven).
@@ -88,7 +88,7 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	}
 
 	// Debug logging for OCR investigation
-	log.Info().
+	log.Debug().
 		Str("mode", string(mode)).
 		Int("toc_items", len(items)).
 		Msg("Meta processor complete")
@@ -104,7 +104,7 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	items = ac.CheckAllItemsAppearanceInStart(ctx, items, pageTexts)
 
 	// Convert TOC items to tree structure using Python-equivalent logic
-	root := g.generateTreeFromTOC(items, len(doc.Pages))
+	root := g.generateTreeFromTOC(items, pageTexts, len(doc.Pages))
 	if root == nil {
 		return nil, fmt.Errorf("failed to generate tree from TOC")
 	}
@@ -115,15 +115,10 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	if progressCb != nil {
 		progressCb(4, 5, "Processing large sections")
 	}
-	
+
 	// Process each child node (recursive traversal, no LLM calls when shouldSplit=false)
 	for _, child := range root.Children {
 		g.processLargeNodesWithMetaProcessor(ctx, child, mp, pageTexts)
-	}
-	
-	// Set stage 4 to 100% after completion
-	if progressCb != nil {
-		progressCb(5, 5, "Processing large sections")
 	}
 
 	// Count total nodes
@@ -138,6 +133,11 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 		if err := g.generateAllSummaries(ctx, root, progressCb, 80, 100); err != nil {
 			return nil, fmt.Errorf("failed to generate summaries: %w", err)
 		}
+	}
+
+	// Ensure progress is marked as complete
+	if progressCb != nil {
+		progressCb(100, 100, "Index generation complete")
 	}
 
 	return tree, nil
@@ -176,8 +176,8 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessorRecursive(ctx context
 		return
 	}
 
-	// Prevent infinite recursion: max depth of 3 levels
-	if depth >= 3 {
+	// Prevent infinite recursion: max depth of 2 levels
+	if depth >= 2 {
 		return
 	}
 
@@ -194,8 +194,8 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessorRecursive(ctx context
 		}
 	}
 
-	// Disable large node splitting temporarily to avoid performance issues
-	// This feature will be re-enabled with optimized LLM batching in future versions
+	// Disable large node splitting temporarily - causing structure混乱 issues
+	// This feature will be reimplemented with proper deduplication and validation in future versions
 	shouldSplit := false
 
 	if shouldSplit {
@@ -222,10 +222,28 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessorRecursive(ctx context
 		ac := NewAppearanceChecker(g.llmClient, g.cfg)
 		subItems = ac.CheckAllItemsAppearanceInStart(ctx, subItems, pageTexts)
 
-		// Filter valid items
+		// Filter valid items and remove duplicates with existing children
+		existingTitles := make(map[string]bool)
+		for _, child := range node.Children {
+			existingTitles[strings.TrimSpace(child.Title)] = true
+		}
+
 		validItems := make([]TOCItem, 0, len(subItems))
 		for _, item := range subItems {
 			if item.PhysicalIndex != nil {
+				title := strings.TrimSpace(item.Title)
+				// Skip if title already exists in children
+				if existingTitles[title] {
+					continue
+				}
+				// Skip if title matches parent node title
+				if strings.TrimSpace(node.Title) == title {
+					continue
+				}
+				// Skip duplicate "第X章" type titles that are redundant
+				if strings.HasPrefix(title, "第") && strings.HasSuffix(title, "章") {
+					continue
+				}
 				validItems = append(validItems, item)
 			}
 		}
@@ -234,15 +252,13 @@ func (g *IndexGenerator) processLargeNodesWithMetaProcessorRecursive(ctx context
 			return
 		}
 
-		// Python: if first sub-item title matches parent, remove it
 		if strings.TrimSpace(node.Title) == strings.TrimSpace(validItems[0].Title) {
-			// Build children from items[1:]
-			childRoot := g.generateTreeFromTOC(validItems[1:], node.EndPage)
+			childRoot := g.generateTreeFromTOC(validItems[1:], subPageTexts, node.EndPage)
 			if childRoot != nil {
 				node.Children = childRoot.Children
 			}
 		} else {
-			childRoot := g.generateTreeFromTOC(validItems, node.EndPage)
+			childRoot := g.generateTreeFromTOC(validItems, subPageTexts, node.EndPage)
 			if childRoot != nil {
 				node.Children = childRoot.Children
 			}

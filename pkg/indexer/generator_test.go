@@ -588,7 +588,7 @@ func TestGenerateTreeFromTOC_Deduplication(t *testing.T) {
 		{Title: "Chapter 3", Structure: "3", PhysicalIndex: ptrInt(7)},
 	}
 
-	root := gen.generateTreeFromTOC(items, 10)
+	root := gen.generateTreeFromTOC(items, []string{}, 10)
 	assert.NotNil(t, root)
 	assert.Equal(t, 3, len(root.Children))
 	assert.Equal(t, "Chapter 1", root.Children[0].Title)
@@ -612,7 +612,7 @@ func TestGenerateTreeFromTOC_EndPageCalculation(t *testing.T) {
 		{Title: "Chapter 3", Structure: "3", PhysicalIndex: ptrInt(10)},
 	}
 
-	root := gen.generateTreeFromTOC(items, 15)
+	root := gen.generateTreeFromTOC(items, []string{}, 15)
 	assert.NotNil(t, root)
 	assert.Equal(t, 3, len(root.Children))
 
@@ -648,7 +648,7 @@ func TestGenerateTreeFromTOC_HierarchyWithEndPageFix(t *testing.T) {
 		{Title: "Chapter 2", Structure: "2", PhysicalIndex: ptrInt(6)},
 	}
 
-	root := gen.generateTreeFromTOC(items, 10)
+	root := gen.generateTreeFromTOC(items, []string{}, 10)
 	assert.NotNil(t, root)
 	assert.Equal(t, 2, len(root.Children))
 
@@ -680,7 +680,7 @@ func TestGenerateTreeFromTOC_OrphanedChildrenRelinked(t *testing.T) {
 		{Title: "Section 2.1", Structure: "2.1", PhysicalIndex: ptrInt(3)},
 	}
 
-	root := gen.generateTreeFromTOC(items, 10)
+	root := gen.generateTreeFromTOC(items, []string{}, 10)
 	assert.NotNil(t, root)
 	assert.Equal(t, 2, len(root.Children))
 
@@ -765,7 +765,7 @@ func TestGenerateTreeFromTOC_CompositeDeduplication(t *testing.T) {
 		{Title: "Chapter 3", Structure: "3", PhysicalIndex: ptrInt(7)},
 	}
 
-	tree := gen.generateTreeFromTOC(items, 10)
+	tree := gen.generateTreeFromTOC(items, []string{}, 10)
 	assert.NotNil(t, tree)
 	// Should have 3 children (duplicate "2" is skipped, keeping first "Chapter 2")
 	assert.Equal(t, 3, len(tree.Children))

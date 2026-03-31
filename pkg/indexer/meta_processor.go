@@ -267,6 +267,8 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 			tocItems = mp.mergeTOCItems(tocItems, additional)
 		}
 
+		tocItems = scanAndAddMissingSubsections(tocItems, pageTexts, startIndex)
+
 		return tocItems, nil
 	}
 
@@ -290,6 +292,8 @@ func (mp *MetaProcessor) processNoTOC(ctx context.Context, pageTexts []string, s
 		}
 		tocItems = mp.mergeTOCItems(tocItems, additional)
 	}
+
+	tocItems = scanAndAddMissingSubsections(tocItems, pageTexts, startIndex)
 
 	return tocItems, nil
 }
