@@ -135,10 +135,14 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 	var currentGroup *PageGroup
 	var currentText strings.Builder
 	var currentTokens int
-	var overlapBuffer []pageWithTokens
-
+	
 	// Pre-allocate buffer for text building (estimate: 500 chars per page)
 	currentText.Grow(estimatedGroups * 500)
+	
+	// Use pre-allocated overlap buffer with circular indexing
+	overlapBuffer := make([]pageWithTokens, g.overlapPages)
+	overlapIndex := 0
+	overlapCount := 0
 
 	for i, pwt := range pagesWithTokens {
 		pageTokens := pwt.tokens
@@ -154,7 +158,8 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 				currentGroup = nil
 				currentText.Reset()
 				currentTokens = 0
-				overlapBuffer = nil
+				overlapIndex = 0
+				overlapCount = 0
 			}
 
 			_, truncated := g.tokenizer.CountWithTruncate(pwt.page.Text, g.maxTokens)
@@ -179,8 +184,11 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 			currentText.Reset()
 			currentTokens = 0
 
-			if len(overlapBuffer) > 0 {
-				for _, overlapPwt := range overlapBuffer {
+			// Re-add overlap pages from circular buffer
+			if overlapCount > 0 {
+				for j := 0; j < overlapCount; j++ {
+					idx := (overlapIndex - overlapCount + j + g.overlapPages) % g.overlapPages
+					overlapPwt := overlapBuffer[idx]
 					if currentText.Len() > 0 {
 						currentText.WriteByte('\n')
 					}
@@ -188,10 +196,11 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 					currentTokens += overlapPwt.tokens
 				}
 				currentGroup = &PageGroup{
-					StartPage: overlapBuffer[0].page.Number,
+					StartPage: overlapBuffer[(overlapIndex-overlapCount+g.overlapPages)%g.overlapPages].page.Number,
 				}
 			}
-			overlapBuffer = nil
+			overlapIndex = 0
+			overlapCount = 0
 		}
 
 		if currentGroup == nil {
@@ -206,9 +215,11 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 		currentText.WriteString(pwt.page.Text)
 		currentTokens += pageTokens
 
-		overlapBuffer = append(overlapBuffer, pwt)
-		if len(overlapBuffer) > g.overlapPages {
-			overlapBuffer = overlapBuffer[len(overlapBuffer)-g.overlapPages:]
+		// Add to circular buffer
+		overlapBuffer[overlapIndex] = pwt
+		overlapIndex = (overlapIndex + 1) % g.overlapPages
+		if overlapCount < g.overlapPages {
+			overlapCount++
 		}
 	}
 

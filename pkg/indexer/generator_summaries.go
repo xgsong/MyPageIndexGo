@@ -3,11 +3,13 @@ package indexer
 import (
 	"context"
 	"fmt"
-	"strings"
+	"runtime"
+	"sort"
 	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/xgsong/mypageindexgo/internal/pool"
 	"github.com/xgsong/mypageindexgo/pkg/document"
 	"github.com/xgsong/mypageindexgo/pkg/language"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
@@ -39,7 +41,11 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
-	summaryConcurrency := max(1, g.cfg.MaxConcurrency*2)
+	// Adaptive concurrency: don't exceed base concurrency or 2x CPU count
+	summaryConcurrency := min(
+		max(1, g.cfg.MaxConcurrency),
+		runtime.NumCPU()*2,
+	)
 	eg.SetLimit(summaryConcurrency)
 
 	var completed atomic.Int32
@@ -59,7 +65,10 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 				}
 			}
 
-			var nodeText strings.Builder
+			// Use pooled builder to reduce allocations
+			nodeText := pool.GetBuilder()
+			defer pool.PutBuilder(nodeText)
+			
 			if totalLen > 0 {
 				nodeText.Grow(totalLen)
 			}
@@ -116,7 +125,8 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 			}
 		}
 
-		var nodeText strings.Builder
+		// Use pooled builder to reduce allocations
+		nodeText := pool.GetBuilder()
 		if totalLen > 0 {
 			nodeText.Grow(totalLen)
 		}
@@ -127,6 +137,8 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 			}
 		}
 		text := nodeText.String()
+		pool.PutBuilder(nodeText) // Return to pool after use
+		
 		tokens := g.tokenizer.Count(text)
 		nodesWithText = append(nodesWithText, nodeWithText{
 			node:   node,
@@ -136,26 +148,40 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
-	summaryConcurrency := max(1, g.cfg.MaxConcurrency*2)
+	// Adaptive concurrency: don't exceed base concurrency or 2x CPU count
+	summaryConcurrency := min(
+		max(1, g.cfg.MaxConcurrency),
+		runtime.NumCPU()*2,
+	)
 	eg.SetLimit(summaryConcurrency)
 
 	var batches [][]nodeWithText
-	var currentBatch []nodeWithText
-	currentTotalTokens := 0
 
-	for _, nwt := range nodesWithText {
-		if len(currentBatch) >= batchSize || (currentTotalTokens+nwt.tokens) > maxTotalTokens {
-			if len(currentBatch) > 0 {
-				batches = append(batches, currentBatch)
-				currentBatch = nil
-				currentTotalTokens = 0
+	// Use First Fit Decreasing bin-packing for better batch utilization
+	// Sort nodes by token count (descending) for better packing
+	sortedNodesWithText := make([]nodeWithText, len(nodesWithText))
+	copy(sortedNodesWithText, nodesWithText)
+	sort.Slice(sortedNodesWithText, func(i, j int) bool {
+		return sortedNodesWithText[i].tokens > sortedNodesWithText[j].tokens
+	})
+
+	// First Fit Decreasing packing
+	for _, nwt := range sortedNodesWithText {
+		placed := false
+		for i := range batches {
+			batchTokens := 0
+			for _, batchItem := range batches[i] {
+				batchTokens += batchItem.tokens
+			}
+			if len(batches[i]) < batchSize && batchTokens+nwt.tokens <= maxTotalTokens {
+				batches[i] = append(batches[i], nwt)
+				placed = true
+				break
 			}
 		}
-		currentBatch = append(currentBatch, nwt)
-		currentTotalTokens += nwt.tokens
-	}
-	if len(currentBatch) > 0 {
-		batches = append(batches, currentBatch)
+		if !placed {
+			batches = append(batches, []nodeWithText{nwt})
+		}
 	}
 
 	var completedBatches atomic.Int32

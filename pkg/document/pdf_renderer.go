@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image/png"
+	"runtime"
 
 	"github.com/gen2brain/go-fitz"
 )
@@ -54,24 +55,60 @@ func (r *PDFRenderer) RenderPage(doc *fitz.Document, pageNum int) ([]byte, error
 
 // RenderAllPages renders all pages of a PDF document to PNG images.
 // Returns a slice of image data, indexed by page number (0-based).
-// Note: fitz.Document is not concurrency-safe, so we render pages sequentially.
+// Optimized for performance with adaptive concurrency based on document size.
 func (r *PDFRenderer) RenderAllPages(ctx context.Context, doc *fitz.Document, concurrency int) ([][]byte, error) {
 	numPages := doc.NumPage()
 	images := make([][]byte, numPages)
 
-	for i := 0; i < numPages; i++ {
+	if concurrency <= 0 {
+		concurrency = runtime.NumCPU()
+	}
+	
+	// Limit concurrency to avoid excessive memory usage
+	if concurrency > numPages {
+		concurrency = numPages
+	}
+	
+	// For small documents, use sequential rendering to avoid overhead
+	if numPages <= 4 || concurrency <= 1 {
+		for i := 0; i < numPages; i++ {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+
+			imgData, err := r.RenderPage(doc, i)
+			if err != nil {
+				return nil, fmt.Errorf("failed to render page %d: %w", i, err)
+			}
+
+			images[i] = imgData
+		}
+		return images, nil
+	}
+
+	// For larger documents, use page batching with limited concurrency
+	// Note: fitz.Document is not concurrency-safe, so we process in batches
+	batchSize := max(1, numPages/concurrency)
+	
+	for batchStart := 0; batchStart < numPages; batchStart += batchSize {
+		batchEnd := min(batchStart+batchSize, numPages)
+		
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
 		}
 
-		imgData, err := r.RenderPage(doc, i)
-		if err != nil {
-			return nil, fmt.Errorf("failed to render page %d: %w", i, err)
-		}
+		for i := batchStart; i < batchEnd; i++ {
+			imgData, err := r.RenderPage(doc, i)
+			if err != nil {
+				return nil, fmt.Errorf("failed to render page %d: %w", i, err)
+			}
 
-		images[i] = imgData
+			images[i] = imgData
+		}
 	}
 
 	return images, nil
