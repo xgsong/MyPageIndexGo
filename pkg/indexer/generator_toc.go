@@ -190,13 +190,6 @@ func addPrefaceIfNeeded(items []TOCItem) []TOCItem {
 // Python: process_large_node_recursively in page_index.py:1000-1027
 // MODIFIED: Lowered threshold and added page-based splitting logic
 func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context, node *document.Node, mp *MetaProcessor, pageTexts []string) {
-	// Log node processing for debugging
-	if node != nil {
-		log.Debug().
-			Str("title", node.Title).
-			Int("pages", node.EndPage-node.StartPage+1).
-			Msg("Processing node")
-	}
 	g.processLargeNodesWithMetaProcessorRecursive(ctx, node, mp, pageTexts, 0)
 }
 
