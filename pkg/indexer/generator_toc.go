@@ -92,19 +92,6 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 		Str("mode", string(mode)).
 		Int("toc_items", len(items)).
 		Msg("Meta processor complete")
-	// for i, item := range items {
-	// 	if i < 5 {
-	// 		pageVal := -1
-	// 		if item.PhysicalIndex != nil {
-	// 			pageVal = *item.PhysicalIndex
-	// 		}
-	// 		log.Debug().
-	// 			Str("structure", item.Structure).
-	// 			Str("title", item.Title).
-	// 			Int("page", pageVal).
-	// 			Msg("TOC item")
-	// 	}
-	// }
 
 	// Python: add_preface_if_needed (utils.py:367-378)
 	items = addPrefaceIfNeeded(items)
@@ -123,30 +110,18 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	}
 
 	// Python: process_large_node_recursively (page_index.py:1057-1061) (Stage 4)
-	// Process large nodes with progress tracking
+	// This stage processes large nodes recursively (currently disabled via shouldSplit flag)
+	// Progress is set once as this is a fast recursive traversal without LLM calls
 	if progressCb != nil {
 		progressCb(4, 5, "Processing large sections")
-	}
-	
-	// Process each child node with progress updates
-	totalChildren := len(root.Children)
-	for i, child := range root.Children {
-		g.processLargeNodesWithMetaProcessor(ctx, child, mp, pageTexts)
-		
-		// Update progress after each child
-		if progressCb != nil && totalChildren > 0 {
-			// Calculate progress within this stage (80% to 100%)
-			stageProgress := 80 + int(float64(i+1)/float64(totalChildren)*20.0)
-			if stageProgress > 99 {
-				stageProgress = 99
-			}
-			progressCb(stageProgress, 100, "Processing large sections")
-		}
-	}
-	
-	// Ensure we reach 100% of this stage before moving to summaries
-	if progressCb != nil {
+		// Set to 100% immediately as this is a fast operation (recursive traversal only)
+		// The actual time-consuming work happens in summary generation stage
 		progressCb(100, 100, "Processing large sections")
+	}
+	
+	// Process each child node (recursive traversal, no LLM calls when shouldSplit=false)
+	for _, child := range root.Children {
+		g.processLargeNodesWithMetaProcessor(ctx, child, mp, pageTexts)
 	}
 
 	// Count total nodes

@@ -23,7 +23,9 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 		if node == nil {
 			return
 		}
-		if node.Summary == "" {
+		// Skip root node - it represents the entire document and shouldn't have a summary
+		// Root node summary would be too large and meaningless
+		if node.Summary == "" && node.Title != "Document" {
 			nodesToProcess = append(nodesToProcess, node)
 		}
 		for _, child := range node.Children {
@@ -87,8 +89,9 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 
 			newCount := int(completed.Add(1))
 			if progressCb != nil {
-				// Use floating-point arithmetic for smoother progress updates
-				progress := startPercent + int(float64(newCount)/float64(len(nodesToProcess))*float64(endPercent-startPercent))
+				// Use integer arithmetic for better performance
+				// This provides adequate progress updates with minimal overhead
+				progress := startPercent + (newCount * (endPercent - startPercent) / len(nodesToProcess))
 				progressCb(progress, 100, "Generating summaries")
 			}
 			return nil
@@ -240,8 +243,8 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 
 			completedBatches.Add(1)
 			if progressCb != nil {
-				// Use floating-point arithmetic to avoid integer division truncation
-				progress := startPercent + int(float64(completedBatches.Load())/float64(len(batches))*float64(endPercent-startPercent))
+				// Use integer arithmetic for better performance
+				progress := startPercent + (int(completedBatches.Load()) * (endPercent - startPercent) / len(batches))
 				progressCb(progress, 100, "Generating summaries")
 			}
 			return nil
