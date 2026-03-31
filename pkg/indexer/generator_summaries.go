@@ -87,8 +87,8 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 
 			newCount := int(completed.Add(1))
 			if progressCb != nil {
-				// Scale progress to the defined range
-				progress := startPercent + (newCount * (endPercent - startPercent) / len(nodesToProcess))
+				// Use floating-point arithmetic for smoother progress updates
+				progress := startPercent + int(float64(newCount)/float64(len(nodesToProcess))*float64(endPercent-startPercent))
 				progressCb(progress, 100, "Generating summaries")
 			}
 			return nil
@@ -240,7 +240,8 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 
 			completedBatches.Add(1)
 			if progressCb != nil {
-				progress := startPercent + (int(completedBatches.Load()) * (endPercent - startPercent) / len(batches))
+				// Use floating-point arithmetic to avoid integer division truncation
+				progress := startPercent + int(float64(completedBatches.Load())/float64(len(batches))*float64(endPercent-startPercent))
 				progressCb(progress, 100, "Generating summaries")
 			}
 			return nil
