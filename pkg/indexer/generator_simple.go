@@ -138,26 +138,28 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, pageTexts []string
 
 		startPage := *items[i].PhysicalIndex
 
-		if g.pageTextMap != nil && len(g.pageTextMap) > 0 {
-			endPage := analyzeSectionEndPage(g.pageTextMap, startPage, items[i].Title, items)
-			items[i].EndPage = endPage
-		} else {
-			nextDifferentPage := -1
-			for j := i + 1; j < len(items); j++ {
-				if items[j].PhysicalIndex != nil && *items[j].PhysicalIndex > startPage {
-					nextDifferentPage = *items[j].PhysicalIndex
-					break
-				}
-			}
-
-			if nextDifferentPage > startPage {
-				items[i].EndPage = nextDifferentPage - 1
-			} else {
-				items[i].EndPage = totalPages
+		nextDifferentPage := -1
+		for j := i + 1; j < len(items); j++ {
+			if items[j].PhysicalIndex != nil && *items[j].PhysicalIndex > startPage {
+				nextDifferentPage = *items[j].PhysicalIndex
+				break
 			}
 		}
 
-		if items[i].EndPage < startPage {
+		if nextDifferentPage > startPage {
+			items[i].EndPage = nextDifferentPage
+		} else {
+			items[i].EndPage = totalPages
+		}
+
+		samePageNext := false
+		if i < len(items)-1 {
+			nextItem := items[i+1]
+			if nextItem.PhysicalIndex != nil && *nextItem.PhysicalIndex == startPage {
+				samePageNext = true
+			}
+		}
+		if samePageNext {
 			items[i].EndPage = startPage
 		}
 	}

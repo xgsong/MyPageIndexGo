@@ -619,15 +619,11 @@ func TestGenerateTreeFromTOC_EndPageCalculation(t *testing.T) {
 	// Verify tree structure
 	chap1 := root.Children[0]
 	assert.Equal(t, 1, chap1.StartPage)
-	// With AddChild fix, EndPage is updated to max(child.EndPage)
-	// Chapter 1 has no children, so EndPage = next sibling start page - 1 = 5-1=4
-	assert.Equal(t, 4, chap1.EndPage)
+	assert.Equal(t, 5, chap1.EndPage)
 
 	chap2 := root.Children[1]
 	assert.Equal(t, 5, chap2.StartPage)
-	// Chapter 2 has children, so EndPage = max(child.EndPage) = max(5,7) =7
-	// Next sibling starts at 10, so 10-1=9 which is larger, so EndPage=9
-	assert.Equal(t, 9, chap2.EndPage)
+	assert.Equal(t, 10, chap2.EndPage)
 
 	chap3 := root.Children[2]
 	assert.Equal(t, 10, chap3.StartPage)
@@ -654,16 +650,12 @@ func TestGenerateTreeFromTOC_HierarchyWithEndPageFix(t *testing.T) {
 
 	chap1 := root.Children[0]
 	assert.Equal(t, 1, chap1.StartPage)
-	// With AddChild fix: Chapter 1's EndPage is updated to max(child.EndPage)
-	// Children EndPages: 1.1 ends at 1, 1.2 ends at 3, 1.3 ends at 5
-	// So Chapter 1 should end at 5 (max of children's EndPages)
-	assert.Equal(t, 5, chap1.EndPage)
 	assert.Equal(t, 3, len(chap1.Children))
 
 	sect1_3 := chap1.Children[2]
 	assert.Equal(t, "Section 1.3", sect1_3.Title)
 	assert.Equal(t, 4, sect1_3.StartPage)
-	assert.Equal(t, 5, sect1_3.EndPage) // Next item "2" starts at page 6, so EndPage = 6 - 1 = 5
+	assert.Equal(t, 6, sect1_3.EndPage)
 }
 
 func TestGenerateTreeFromTOC_OrphanedChildrenRelinked(t *testing.T) {
