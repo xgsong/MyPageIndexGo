@@ -123,11 +123,30 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	}
 
 	// Python: process_large_node_recursively (page_index.py:1057-1061) (Stage 4)
+	// Process large nodes with progress tracking
 	if progressCb != nil {
 		progressCb(4, 5, "Processing large sections")
 	}
-	for _, child := range root.Children {
+	
+	// Process each child node with progress updates
+	totalChildren := len(root.Children)
+	for i, child := range root.Children {
 		g.processLargeNodesWithMetaProcessor(ctx, child, mp, pageTexts)
+		
+		// Update progress after each child
+		if progressCb != nil && totalChildren > 0 {
+			// Calculate progress within this stage (80% to 100%)
+			stageProgress := 80 + int(float64(i+1)/float64(totalChildren)*20.0)
+			if stageProgress > 99 {
+				stageProgress = 99
+			}
+			progressCb(stageProgress, 100, "Processing large sections")
+		}
+	}
+	
+	// Ensure we reach 100% of this stage before moving to summaries
+	if progressCb != nil {
+		progressCb(100, 100, "Processing large sections")
 	}
 
 	// Count total nodes
@@ -171,6 +190,13 @@ func addPrefaceIfNeeded(items []TOCItem) []TOCItem {
 // Python: process_large_node_recursively in page_index.py:1000-1027
 // MODIFIED: Lowered threshold and added page-based splitting logic
 func (g *IndexGenerator) processLargeNodesWithMetaProcessor(ctx context.Context, node *document.Node, mp *MetaProcessor, pageTexts []string) {
+	// Log node processing for debugging
+	if node != nil {
+		log.Debug().
+			Str("title", node.Title).
+			Int("pages", node.EndPage-node.StartPage+1).
+			Msg("Processing node")
+	}
 	g.processLargeNodesWithMetaProcessorRecursive(ctx, node, mp, pageTexts, 0)
 }
 
