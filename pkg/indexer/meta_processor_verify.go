@@ -3,8 +3,11 @@ package indexer
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/rs/zerolog/log"
 )
@@ -51,31 +54,38 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 
 	results := make([]verifyResult, 0, len(items))
 	var mu sync.Mutex
-	var wg sync.WaitGroup
+
+	// Use errgroup to limit concurrency and handle errors properly
+	// Limit to avoid overwhelming LLM with too many concurrent requests
+	eg, ctx := errgroup.WithContext(ctx)
+	verifyConcurrency := min(runtime.NumCPU()*2, 10)
+	eg.SetLimit(verifyConcurrency)
 
 	for i, item := range items {
 		if item.PhysicalIndex == nil {
 			continue
 		}
 
-		wg.Add(1)
-		go func(idx int, itm TOCItem) {
-			defer wg.Done()
-
-			itemCopy := itm
-			itemCopy.ListIndex = idx
+		i := i
+		item := item
+		eg.Go(func() error {
+			itemCopy := item
+			itemCopy.ListIndex = i
 			appears, err := ac.CheckTitleAppearance(ctx, itemCopy, pageTexts, startIndex)
 			if err != nil {
-				return
+				return err
 			}
 
 			mu.Lock()
-			results = append(results, verifyResult{itemIndex: idx, appears: appears, item: itemCopy})
+			results = append(results, verifyResult{itemIndex: i, appears: appears, item: itemCopy})
 			mu.Unlock()
-		}(i, item)
+			return nil
+		})
 	}
 
-	wg.Wait()
+	if err := eg.Wait(); err != nil {
+		log.Warn().Err(err).Msg("TOC verification encountered errors")
+	}
 
 	correctCount := 0
 	var incorrectItems []TOCItem

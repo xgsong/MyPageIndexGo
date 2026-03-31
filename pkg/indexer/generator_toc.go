@@ -114,14 +114,16 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	// Progress is set once as this is a fast recursive traversal without LLM calls
 	if progressCb != nil {
 		progressCb(4, 5, "Processing large sections")
-		// Set to 100% immediately as this is a fast operation (recursive traversal only)
-		// The actual time-consuming work happens in summary generation stage
-		progressCb(100, 100, "Processing large sections")
 	}
 	
 	// Process each child node (recursive traversal, no LLM calls when shouldSplit=false)
 	for _, child := range root.Children {
 		g.processLargeNodesWithMetaProcessor(ctx, child, mp, pageTexts)
+	}
+	
+	// Set stage 4 to 100% after completion
+	if progressCb != nil {
+		progressCb(5, 5, "Processing large sections")
 	}
 
 	// Count total nodes
