@@ -101,3 +101,69 @@ func TestJSONCleaner_EscapedBackslash(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `C:\Users\test`, result.Path)
 }
+
+func TestJSONCleaner_EscapedQuoteInText(t *testing.T) {
+	cleaner := NewJSONCleaner()
+
+	// Input with escaped quote in Chinese text - simulates LLM output
+	input := `{"summary": "斯密认为，分工并非人类智慧的产物，而是人类天性中某种倾向的必然结果。这种倾向就是\"互通有无，物物交换，互相\"。"}`
+	cleaned := cleaner.Clean(input)
+
+	var result struct {
+		Summary string `json:"summary"`
+	}
+	err := cleaner.ParseJSON(cleaned, &result)
+	require.NoError(t, err)
+	// The escaped quotes should be properly parsed as regular quotes
+	assert.Equal(t, `斯密认为，分工并非人类智慧的产物，而是人类天性中某种倾向的必然结果。这种倾向就是"互通有无，物物交换，互相"。`, result.Summary)
+}
+
+func TestJSONCleaner_UnescapedBackslashBeforeQuote(t *testing.T) {
+	cleaner := NewJSONCleaner()
+
+	// Input with unescaped backslash before quote - problematic case
+	// This simulates when LLM outputs text with backslash that shouldn't be there
+	input := `{"summary": "text with backslash\\ before quote"}`
+	cleaned := cleaner.Clean(input)
+
+	var result struct {
+		Summary string `json:"summary"`
+	}
+	err := cleaner.ParseJSON(cleaned, &result)
+	require.NoError(t, err)
+	// Backslash-quote sequence should be preserved as-is in JSON
+	assert.Equal(t, `text with backslash\ before quote`, result.Summary)
+}
+
+func TestJSONCleaner_InvalidEscapeSequence(t *testing.T) {
+	cleaner := NewJSONCleaner()
+
+	// Simulates LLM output with invalid escape sequence: backslash followed by non-escape char
+	// This is the problematic case from the user's report
+	input := `{"summary": "为斯密后来的经济\影响"}`
+	cleaned := cleaner.Clean(input)
+
+	var result struct {
+		Summary string `json:"summary"`
+	}
+	err := cleaner.ParseJSON(cleaned, &result)
+	require.NoError(t, err)
+	// Invalid escape \影 should be converted to \\影 (escaped backslash + char)
+	assert.Equal(t, `为斯密后来的经济\影响`, result.Summary)
+}
+
+func TestJSONCleaner_InvalidEscapeSequenceWithNewline(t *testing.T) {
+	cleaner := NewJSONCleaner()
+
+	// Simulates LLM output with backslash followed by 'n' that's not a real newline
+	input := `{"summary": "text\not a newline"}`
+	cleaned := cleaner.Clean(input)
+
+	var result struct {
+		Summary string `json:"summary"`
+	}
+	err := cleaner.ParseJSON(cleaned, &result)
+	require.NoError(t, err)
+	// \n should be preserved as valid escape sequence
+	assert.Equal(t, "text\not a newline", result.Summary)
+}

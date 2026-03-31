@@ -47,7 +47,7 @@ max_pages_per_node: 10
 max_tokens_per_node: 24000
 
 # Generate summaries for each index node
-generate_summaries: false
+generate_summaries: true
 
 # Enable batch LLM calls for summary generation
 enable_batch_calls: true

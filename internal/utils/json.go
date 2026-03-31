@@ -85,14 +85,28 @@ func (c *JSONCleaner) Clean(input string) string {
 
 	// Replace unescaped newlines within strings with \\n
 	// JSON doesn't allow raw newlines inside string literals
+	// Also handle unescaped backslashes to ensure valid JSON
 	var result strings.Builder
 	inString := false
 	escaped := false
 	for _, r := range input {
 		switch {
 		case escaped:
-			// Previous char was backslash — this char is escaped, just emit it
-			result.WriteRune(r)
+			// Previous char was backslash — validate the escape sequence
+			// Valid JSON escape sequences: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+			switch r {
+			case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+				// Valid escape sequence, emit as-is
+				result.WriteRune(r)
+			case 'u':
+				// Unicode escape - emit 'u' and next 4 hex digits
+				result.WriteRune(r)
+			default:
+				// Invalid escape sequence - backslash should have been escaped
+				// Insert another backslash to make it \\ (escaped backslash)
+				result.WriteRune('\\')
+				result.WriteRune(r)
+			}
 			escaped = false
 		case r == '\\' && inString:
 			escaped = true
