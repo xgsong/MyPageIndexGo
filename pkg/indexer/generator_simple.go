@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -127,8 +128,52 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 	nodes := make(map[string]*document.Node)
 	var rootNodes []*document.Node
 
+	// Helper function to create or get parent node
+	// If parent doesn't exist, creates a placeholder that will be updated later
+	var getOrCreateParentNode func(structure string) *document.Node
+	getOrCreateParentNode = func(structure string) *document.Node {
+		if structure == "" {
+			return nil
+		}
+		if node, ok := nodes[structure]; ok {
+			return node
+		}
+		// Parent doesn't exist yet, create a placeholder
+		// Title will be updated when the real item is processed
+		// If no real item comes, we'll generate a reasonable title from structure
+		placeholderNode := document.NewNode("", 1, totalPages)
+		nodes[structure] = placeholderNode
+		
+		// Recursively ensure grandparent exists
+		grandparentStructure := getParentStructure(structure)
+		if grandparentStructure != "" {
+			grandparent := getOrCreateParentNode(grandparentStructure)
+			if grandparent != nil {
+				grandparent.AddChild(placeholderNode)
+			} else {
+				rootNodes = append(rootNodes, placeholderNode)
+			}
+		} else {
+			rootNodes = append(rootNodes, placeholderNode)
+		}
+		return placeholderNode
+	}
+
 	for _, item := range items {
-		if _, exists := nodes[item.Structure]; exists {
+		if existingNode, exists := nodes[item.Structure]; exists {
+			// Node already exists - only update if it's a placeholder (empty title)
+			// This handles the case where child appears before parent in page order
+			if existingNode.Title == "" {
+				startPage := 1
+				if item.PhysicalIndex != nil {
+					startPage = *item.PhysicalIndex
+				}
+				existingNode.StartPage = startPage
+				existingNode.EndPage = item.EndPage
+				preview := extractContentPreview(g.pageTextMap, startPage, item.EndPage, 100)
+				existingNode.Title = enrichTitleWithPreview(item.Title, preview)
+			}
+			// If title already exists, skip (first occurrence wins - deduplication)
 			continue
 		}
 
@@ -146,13 +191,35 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, totalPages int) *d
 		parentStructure := getParentStructure(item.Structure)
 
 		if parentStructure != "" {
-			if parent, ok := nodes[parentStructure]; ok {
+			parent := getOrCreateParentNode(parentStructure)
+			if parent != nil {
 				parent.AddChild(node)
 			} else {
 				rootNodes = append(rootNodes, node)
 			}
 		} else {
 			rootNodes = append(rootNodes, node)
+		}
+	}
+
+	// Fill in placeholder titles for missing parent nodes
+	// This handles cases where LLM returns subsections (e.g., 10.1, 10.2) without the parent (10)
+	for structure, node := range nodes {
+		if node.Title == "" && structure != "" {
+			// Generate a reasonable title from structure
+			// Try to find a child with a meaningful title to use as parent title
+			var inferredTitle string
+			for _, item := range items {
+				if item.Structure == structure {
+					inferredTitle = item.Title
+					break
+				}
+			}
+			if inferredTitle == "" {
+				// No item found, generate title from structure
+				inferredTitle = fmt.Sprintf("第%s章", structure)
+			}
+			node.Title = inferredTitle
 		}
 	}
 
