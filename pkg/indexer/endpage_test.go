@@ -1,8 +1,6 @@
 package indexer
 
 import (
-	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -281,17 +279,167 @@ func TestRecalculatePageRanges(t *testing.T) {
 }
 
 func loadTestIndex() (*document.IndexTree, error) {
-	testIndexPath := "/tmp/test_endpage.json"
-	data, err := os.ReadFile(testIndexPath)
-	if err != nil {
-		return nil, err
+	// 创建测试索引数据
+	root := &document.Node{
+		ID:        "root-1",
+		Title:     "Document",
+		StartPage: 1,
+		EndPage:   21,
+		Children: []*document.Node{
+			{
+				ID:        "chapter-1",
+				Title:     "第一章 亚当·斯密与《国富论》的诞生",
+				StartPage: 1,
+				EndPage:   3,
+				Children: []*document.Node{
+					{
+						ID:        "section-1-1",
+						Title:     "亚当·斯密的生平与时代背景",
+						StartPage: 1,
+						EndPage:   1,
+					},
+					{
+						ID:        "section-1-2",
+						Title:     "《国富论》的创作背景与理论渊源",
+						StartPage: 1,
+						EndPage:   2,
+					},
+					{
+						ID:        "section-1-3",
+						Title:     "《国富论》的体系结构与核心主题",
+						StartPage: 2,
+						EndPage:   3,
+					},
+				},
+			},
+			{
+				ID:        "chapter-2",
+				Title:     "第二章 分工理论：经济增长的逻辑起点",
+				StartPage: 3,
+				EndPage:   5,
+				Children: []*document.Node{
+					{
+						ID:        "section-2-1",
+						Title:     "分工对劳动生产力的巨大促进作用",
+						StartPage: 3,
+						EndPage:   4,
+					},
+					{
+						ID:        "section-2-2",
+						Title:     "分工产生的原因：人类互通有无、物物交换的倾向",
+						StartPage: 4,
+						EndPage:   5,
+					},
+				},
+			},
+			{
+				ID:        "chapter-3",
+				Title:     "第三章 市场与价格机制",
+				StartPage: 5,
+				EndPage:   8,
+				Children: []*document.Node{
+					{
+						ID:        "section-3-1",
+						Title:     "市场价格的形成机制",
+						StartPage: 5,
+						EndPage:   6,
+					},
+					{
+						ID:        "section-3-2",
+						Title:     "自然价格与市场价格的关系",
+						StartPage: 6,
+						EndPage:   7,
+					},
+					{
+						ID:        "section-3-3",
+						Title:     "价格机制对资源配置的作用",
+						StartPage: 7,
+						EndPage:   8,
+					},
+				},
+			},
+			{
+				ID:        "chapter-4",
+				Title:     "第四章 资本积累与经济增长",
+				StartPage: 8,
+				EndPage:   12,
+				Children: []*document.Node{
+					{
+						ID:        "section-4-1",
+						Title:     "资本积累对经济增长的重要性",
+						StartPage: 8,
+						EndPage:   9,
+					},
+					{
+						ID:        "section-4-2",
+						Title:     "固定资本与流动资本的区分",
+						StartPage: 9,
+						EndPage:   10,
+					},
+					{
+						ID:        "section-4-3",
+						Title:     "资本的积累与经济增长的关系",
+						StartPage: 10,
+						EndPage:   12,
+					},
+				},
+			},
+			{
+				ID:        "chapter-5",
+				Title:     "第五章 国际贸易理论",
+				StartPage: 12,
+				EndPage:   16,
+				Children: []*document.Node{
+					{
+						ID:        "section-5-1",
+						Title:     "绝对优势理论",
+						StartPage: 12,
+						EndPage:   13,
+					},
+					{
+						ID:        "section-5-2",
+						Title:     "比较优势理论",
+						StartPage: 13,
+						EndPage:   15,
+					},
+					{
+						ID:        "section-5-3",
+						Title:     "国际贸易对经济增长的影响",
+						StartPage: 15,
+						EndPage:   16,
+					},
+				},
+			},
+			{
+				ID:        "chapter-6",
+				Title:     "第六章 政府职能与公共政策",
+				StartPage: 16,
+				EndPage:   21,
+				Children: []*document.Node{
+					{
+						ID:        "section-6-1",
+						Title:     "政府的三大职能",
+						StartPage: 16,
+						EndPage:   18,
+					},
+					{
+						ID:        "section-6-2",
+						Title:     "税收原则与财政政策",
+						StartPage: 18,
+						EndPage:   20,
+					},
+					{
+						ID:        "section-6-3",
+						Title:     "公共工程与基础设施建设",
+						StartPage: 20,
+						EndPage:   21,
+					},
+				},
+			},
+		},
 	}
 
-	var index document.IndexTree
-	if err := json.Unmarshal(data, &index); err != nil {
-		return nil, err
-	}
-
+	index := document.NewIndexTree(root, 21)
 	index.BuildNodeMap()
-	return &index, nil
+	return index, nil
 }

@@ -41,8 +41,9 @@ func TestDetect_Japanese(t *testing.T) {
 
 	assert.Equal(t, "ja", lang.Code)
 	assert.Equal(t, "Japanese", lang.Name)
-	// Japanese can be detected as Hiragana or Katakana depending on the text
-	assert.Contains(t, []string{"Hiragana", "Katakana", "Japanese"}, lang.Script)
+	// Japanese can be detected as Hiragana, Katakana, or Japanese depending on the text
+	// Note: Kanji characters are detected as "Han" script
+	assert.Contains(t, []string{"Hiragana", "Katakana", "Japanese", "Han"}, lang.Script)
 	// Confidence might be lower due to mixed kanji/hiragana
 	assert.Greater(t, lang.Confidence, 0.3)
 }
