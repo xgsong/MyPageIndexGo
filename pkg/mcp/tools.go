@@ -180,7 +180,109 @@ func searchIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 }
 
 func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultError("update_index 工具尚未实现"), nil
+	startTime := time.Now()
+
+	var req UpdateIndexRequest
+	if err := request.BindArguments(&req); err != nil {
+		return mcp.NewToolResultErrorf("参数解析失败：%v", err), nil
+	}
+
+	if req.ExistingIndexPath == "" {
+		return mcp.NewToolResultError("existing_index_path 是必需参数"), nil
+	}
+
+	if req.NewFilePath == "" {
+		return mcp.NewToolResultError("new_file_path 是必需参数"), nil
+	}
+
+	existingTree, err := output.LoadIndexTree(req.ExistingIndexPath)
+	if err != nil {
+		return mcp.NewToolResultErrorf("现有索引加载失败：%v", err), nil
+	}
+
+	if _, err := os.Stat(req.NewFilePath); err != nil {
+		return mcp.NewToolResultErrorf("新文档文件不存在：%s", req.NewFilePath), nil
+	}
+
+	ext := filepath.Ext(req.NewFilePath)
+	if ext != ".pdf" && ext != ".PDF" && ext != ".md" && ext != ".markdown" {
+		return mcp.NewToolResultErrorf("不支持的文件格式：%s", ext), nil
+	}
+
+	file, err := os.Open(req.NewFilePath)
+	if err != nil {
+		return mcp.NewToolResultErrorf("文件打开失败：%v", err), nil
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	var parser document.DocumentParser
+	if ext == ".pdf" || ext == ".PDF" {
+		parser = document.NewPDFParser()
+	} else if ext == ".md" || ext == ".markdown" {
+		parser = document.NewMarkdownParser()
+	} else {
+		return mcp.NewToolResultErrorf("不支持的文件格式：%s", ext), nil
+	}
+
+	newDoc, err := parser.Parse(file)
+	if err != nil {
+		return mcp.NewToolResultErrorf("文档解析失败：%v", err), nil
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return mcp.NewToolResultErrorf("配置加载失败：%v", err), nil
+	}
+
+	if req.Model != nil && *req.Model != "" {
+		cfg.OpenAIModel = *req.Model
+	}
+
+	if req.MaxConcurrency != nil {
+		cfg.MaxConcurrency = *req.MaxConcurrency
+	}
+
+	var llmClient llm.LLMClient = llm.NewOpenAIClient(cfg)
+	if cfg.EnableLLMCache {
+		cacheTTL := time.Duration(cfg.LLMCacheTTL) * time.Second
+		llmClient = llm.NewCachedLLMClient(llmClient, cacheTTL, true)
+	}
+
+	generator, err := indexer.NewIndexGenerator(cfg, llmClient)
+	if err != nil {
+		return mcp.NewToolResultErrorf("索引生成器创建失败：%v", err), nil
+	}
+
+	mergedTree, err := generator.Update(ctx, existingTree, newDoc)
+	if err != nil {
+		return mcp.NewToolResultErrorf("索引更新失败：%v", err), nil
+	}
+
+	outputPath := req.OutputPath
+	if outputPath == nil || *outputPath == "" {
+		defaultPath := req.ExistingIndexPath + ".merged.json"
+		outputPath = &defaultPath
+	}
+
+	if err := output.SaveIndexTree(mergedTree, *outputPath); err != nil {
+		return mcp.NewToolResultErrorf("索引保存失败：%v", err), nil
+	}
+
+	response := UpdateIndexResponse{
+		Success:    true,
+		OutputPath: *outputPath,
+		Stats: MergeStats{
+			OriginalPages: existingTree.TotalPages,
+			NewPages:      len(newDoc.Pages),
+			TotalPages:    mergedTree.TotalPages,
+			TotalNodes:    mergedTree.CountAllNodes(),
+			TimeSeconds:   time.Since(startTime).Seconds(),
+		},
+	}
+
+	return marshalResult(response)
 }
 
 func marshalResult(data any) (*mcp.CallToolResult, error) {

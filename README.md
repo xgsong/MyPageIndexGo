@@ -249,9 +249,27 @@ Search in generated index using LLM-based reasoning.
 }
 ```
 
-#### update_index (Coming Soon)
+#### update_index
 
 Incrementally update existing index with new documents.
+
+**Parameters:**
+- `existing_index_path` (required): Path to existing index JSON file
+- `new_file_path` (required): Path to new document (PDF or Markdown)
+- `output_path` (optional): Output merged index file path, defaults to `{existing_index_path}.merged.json`
+- `model` (optional): LLM model to use, defaults to config.yaml setting
+- `max_concurrency` (optional): Maximum concurrent LLM calls
+
+**Example:**
+```json
+{
+  "existing_index_path": "/path/to/existing.index.json",
+  "new_file_path": "/path/to/new_document.pdf",
+  "output_path": "/path/to/merged.index.json",
+  "model": "gpt-4o",
+  "max_concurrency": 10
+}
+```
 
 ## Example
 

@@ -155,13 +155,34 @@ func TestSearchIndexHandler_IndexFileNotFound(t *testing.T) {
 	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "索引加载失败")
 }
 
-func TestUpdateIndexHandler_NotImplemented(t *testing.T) {
+func TestUpdateIndexHandler_ConfigLoadFailure(t *testing.T) {
+	tmpIndexFile := "/tmp/test_update_config.index.json"
+	tmpNewFile := "/tmp/test_new.md"
+
+	indexContent := `{
+		"root": {"id": "root", "title": "Test", "start_page": 1, "end_page": 10, "children": []},
+		"total_pages": 10,
+		"document_info": "Test",
+		"generated_at": "2024-01-01T00:00:00Z",
+		"last_modified": "2024-01-01T00:00:00Z"
+	}`
+	err := os.WriteFile(tmpIndexFile, []byte(indexContent), 0644)
+	assert.NoError(t, err)
+
+	err = os.WriteFile(tmpNewFile, []byte("# Test"), 0644)
+	assert.NoError(t, err)
+
+	defer func() {
+		_ = os.Remove(tmpIndexFile)
+		_ = os.Remove(tmpNewFile)
+	}()
+
 	req := mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
 			Name: "update_index",
 			Arguments: map[string]any{
-				"existing_index_path": "/tmp/existing.index.json",
-				"new_file_path":       "/tmp/new.pdf",
+				"existing_index_path": tmpIndexFile,
+				"new_file_path":       tmpNewFile,
 			},
 		},
 	}
@@ -170,7 +191,7 @@ func TestUpdateIndexHandler_NotImplemented(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.True(t, result.IsError)
-	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "尚未实现")
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "配置加载失败")
 }
 
 func TestMarshalResult_Success(t *testing.T) {
@@ -760,6 +781,131 @@ func TestUpdateIndexRequest_InvalidParameterTypes(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot unmarshal number")
+}
+
+func TestUpdateIndexHandler_MissingExistingIndexPath(t *testing.T) {
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "update_index",
+			Arguments: map[string]any{
+				"existing_index_path": "",
+				"new_file_path":       "/tmp/test.pdf",
+			},
+		},
+	}
+
+	result, err := updateIndexHandler(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "existing_index_path 是必需参数")
+}
+
+func TestUpdateIndexHandler_MissingNewFilePath(t *testing.T) {
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "update_index",
+			Arguments: map[string]any{
+				"existing_index_path": "/tmp/existing.index.json",
+				"new_file_path":       "",
+			},
+		},
+	}
+
+	result, err := updateIndexHandler(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "new_file_path 是必需参数")
+}
+
+func TestUpdateIndexHandler_NonExistentIndexPath(t *testing.T) {
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "update_index",
+			Arguments: map[string]any{
+				"existing_index_path": "/nonexistent_index_xyz123.index.json",
+				"new_file_path":       "/tmp/test_new.pdf",
+			},
+		},
+	}
+
+	result, err := updateIndexHandler(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "现有索引加载失败")
+}
+
+func TestUpdateIndexHandler_NonExistentNewFile(t *testing.T) {
+	tmpIndexFile := "/tmp/test_update_existing.index.json"
+	indexContent := `{
+		"root": {"id": "root", "title": "Test", "start_page": 1, "end_page": 10, "children": []},
+		"total_pages": 10,
+		"document_info": "Test",
+		"generated_at": "2024-01-01T00:00:00Z",
+		"last_modified": "2024-01-01T00:00:00Z"
+	}`
+	err := os.WriteFile(tmpIndexFile, []byte(indexContent), 0644)
+	assert.NoError(t, err)
+	defer func() {
+		_ = os.Remove(tmpIndexFile)
+	}()
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "update_index",
+			Arguments: map[string]any{
+				"existing_index_path": tmpIndexFile,
+				"new_file_path":       "/nonexistent_newfile_abc123.pdf",
+			},
+		},
+	}
+
+	result, err := updateIndexHandler(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "新文档文件不存在")
+}
+
+func TestUpdateIndexHandler_UnsupportedFormat(t *testing.T) {
+	tmpIndexFile := "/tmp/test_update_fmt.index.json"
+	tmpNewFile := "/tmp/test_unsupported.txt"
+
+	indexContent := `{
+		"root": {"id": "root", "title": "Test", "start_page": 1, "end_page": 10, "children": []},
+		"total_pages": 10,
+		"document_info": "Test",
+		"generated_at": "2024-01-01T00:00:00Z",
+		"last_modified": "2024-01-01T00:00:00Z"
+	}`
+	err := os.WriteFile(tmpIndexFile, []byte(indexContent), 0644)
+	assert.NoError(t, err)
+
+	f, err := os.Create(tmpNewFile)
+	assert.NoError(t, err)
+	defer func() {
+		_ = f.Close()
+		_ = os.Remove(tmpIndexFile)
+		_ = os.Remove(tmpNewFile)
+	}()
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "update_index",
+			Arguments: map[string]any{
+				"existing_index_path": tmpIndexFile,
+				"new_file_path":       tmpNewFile,
+			},
+		},
+	}
+
+	result, err := updateIndexHandler(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "不支持的文件格式")
 }
 
 func TestUpdateIndexRequest_PartialParameters(t *testing.T) {
