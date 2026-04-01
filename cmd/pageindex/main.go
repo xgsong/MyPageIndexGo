@@ -165,7 +165,6 @@ func generateAction(c *cli.Context) error {
 		var ocrClient document.OCRClient
 		if cfg.OCREnabled {
 			ocrClient = llm.NewOpenAIOCRClient(cfg)
-			log.Info().Str("model", cfg.OCRModel).Msg("OCR enabled for scanned PDFs")
 		}
 		parser = document.NewPDFParserWithOCR(ocrClient)
 		log.Info().Str("file", inputPath).Msg("Parsing PDF document")
@@ -217,11 +216,11 @@ func generateAction(c *cli.Context) error {
 	progressCallback := func(done, total int, desc string) {
 		if total > 0 {
 			percent := int(float64(done) / float64(total) * 100)
-			bar.Set(percent)        // nolint:errcheck // Progress bar error non-critical
+			bar.Set(percent)   // nolint:errcheck // Progress bar error non-critical
 			bar.Describe(desc) // nolint:errcheck // Progress bar error non-critical
 		}
 	}
-	bar.Set(5)           // nolint:errcheck // Progress bar error non-critical
+	bar.Set(5)                   // nolint:errcheck // Progress bar error non-critical
 	bar.Describe("Initializing") // nolint:errcheck // Progress bar error non-critical
 
 	// Use GenerateWithTOC for better TOC-based indexing with deduplication
@@ -392,7 +391,6 @@ func updateAction(c *cli.Context) error {
 		var ocrClient document.OCRClient
 		if cfg.OCREnabled {
 			ocrClient = llm.NewOpenAIOCRClient(cfg)
-			log.Info().Str("model", cfg.OCRModel).Msg("OCR enabled for scanned PDFs")
 		}
 		parser = document.NewPDFParserWithOCR(ocrClient)
 		log.Info().Str("file", inputPath).Msg("Parsing new PDF document")
