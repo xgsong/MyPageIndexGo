@@ -90,6 +90,20 @@ func (d *Detector) Detect(text string) Language {
 	// Calculate confidence
 	confidence := float64(maxCount) / float64(totalChars)
 
+	// Special handling for Japanese: if text contains Hiragana or Katakana,
+	// and the dominant script is Han, we should still consider it as Japanese
+	// because Japanese text often contains Kanji (Han) characters
+	if dominantScript == "Han" {
+		if _, hasHiragana := counts["Hiragana"]; hasHiragana {
+			// Text contains Hiragana, so it's likely Japanese
+			return Language{Code: "ja", Name: "Japanese", Script: "Japanese", Confidence: confidence}
+		}
+		if _, hasKatakana := counts["Katakana"]; hasKatakana {
+			// Text contains Katakana, so it's likely Japanese
+			return Language{Code: "ja", Name: "Japanese", Script: "Japanese", Confidence: confidence}
+		}
+	}
+
 	// Map script to language
 	// Note: This is simplified - in practice, we'd need more context to distinguish
 	// languages that share the same script (e.g., English vs French vs German)
