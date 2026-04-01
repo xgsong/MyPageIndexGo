@@ -139,7 +139,7 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, pageTexts []string
 	rootNodes = cleanNodeStructure(rootNodes)
 
 	// Step 8: Merge duplicate chapters
-	rootNodes, nodes = mergeDuplicateChapters(rootNodes, nodes)
+	rootNodes, _ = mergeDuplicateChapters(rootNodes, nodes)
 
 	// Step 9: Recalculate parent page ranges
 	rootNodes = recalculateParentPageRanges(rootNodes)
