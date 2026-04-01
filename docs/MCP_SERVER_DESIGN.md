@@ -557,7 +557,13 @@ func TestMCPServerIntegration(t *testing.T) {
 
 - 仅支持 stdio 传输协议
 - 无认证机制（敏感操作需由客户端控制）
-- 无流式响应支持（长时间操作会阻塞）
+
+### 9.2 已完成扩展
+
+- ✅ 流式响应支持（进度回调） - v1.1.0
+  - 使用 MCP `notifications/progress` 协议
+  - 支持 `progressToken` 传递
+  - 实时反馈操作进度
 
 ### 9.2 后续扩展方向
 
@@ -566,7 +572,54 @@ func TestMCPServerIntegration(t *testing.T) {
 - 添加流式响应支持（进度回调）
 - 添加更多工具（如 `list_indexes`、`delete_index`）
 
-## 10. 文件清单
+## 10. 进度回调实现 (v1.1.0)
+
+### 10.1 进度通知协议
+
+使用 MCP 标准 `notifications/progress` 通知：
+
+```go
+srv := server.ServerFromContext(ctx)
+if srv != nil {
+    _ = srv.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
+        "progressToken": request.Params.Meta.ProgressToken,
+        "progress":      done,
+        "total":         total,
+        "message":       desc,
+    })
+}
+```
+
+### 10.2 各工具进度阶段
+
+**generate_index (5 阶段):**
+1. TOC 检测
+2. 文档结构处理
+3. TOC 验证
+4. 大节点处理
+5. 摘要生成
+
+**search_index (3 阶段):**
+1. 加载索引
+2. LLM 搜索
+3. 搜索完成
+
+**update_index (6 阶段):**
+1. 加载现有索引
+2. 解析新文档
+3. 加载配置
+4. 生成新文档索引
+5. 保存合并索引
+6. 更新完成
+
+### 10.3 实现要点
+
+- 进度回调函数通过 `ProgressCallback` 类型传递
+- 使用 `server.ServerFromContext(ctx)` 获取服务器实例
+- `progressToken` 来自请求元数据，用于关联进度通知
+- 进度通知是可选的，客户端可以选择不支持
+
+## 11. 文件清单
 
 | 文件 | 行数估算 | 职责 |
 |------|----------|------|
@@ -582,4 +635,5 @@ func TestMCPServerIntegration(t *testing.T) {
 
 | 日期 | 版本 | 描述 |
 |------|------|------|
+| 2026-04-01 | v1.1.0 | 添加进度回调支持（notifications/progress） |
 | 2026-03-29 | v1.0.0 | 初始版本 |
