@@ -247,5 +247,38 @@ type Config struct {
 2. **复杂度降低**：高复杂度函数拆分为10个职责单一的函数
 3. **可维护性提升**：代码结构更清晰，易于理解和扩展
 4. **配置管理优化**：提出硬编码配置提取方案，提高配置灵活性
+5. **MCP Streamable HTTP 实现**：新增 HTTP 传输支持，包含认证、CORS、健康端点
+
+### 7. MCP Streamable HTTP 实现（2026-04-01 v1.2.0）
+
+**目标**：实现 MCP Streamable HTTP 传输协议，支持远程访问和多客户端并发。
+
+**新增文件**：
+- `pkg/mcp/http.go` (214 行) - Streamable HTTP 服务器
+- `pkg/mcp/stdio.go` (46 行) - Stdio 服务器封装
+- `pkg/mcp/http_test.go` (381 行) - HTTP 单元测试
+- `pkg/mcp/integration_test.go` (352 行) - 集成测试
+
+**修改文件**：
+- `cmd/mcp/main.go` (+105 行) - CLI 参数解析
+- `pkg/mcp/server.go` (+2 行) - 类型别名
+- `README.md` (+60 行) - HTTP 传输文档
+- `docs/MCP_SERVER_DESIGN.md` (+63 行) - 设计文档更新
+
+**代码质量**：
+- ✅ 0 lint errors (golangci-lint)
+- ✅ 88 tests PASS (go test)
+- ✅ 59.4% test coverage
+- ✅ 所有文件符合 250 行限制
+
+**功能特性**：
+- Streamable HTTP 传输（MCP 规范 2025-03-26+）
+- Bearer Token 认证
+- API Key 认证
+- CORS 支持
+- 健康端点 `/health`, `/ready`
+- 多传输模式 (stdio/http/both)
+
+详见：`docs/MCP_STREAMABLE_HTTP_IMPLEMENTATION.md`
 
 这些改进为项目的长期健康发展奠定了坚实基础，提高了代码质量、可维护性和可扩展性。

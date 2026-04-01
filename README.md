@@ -170,7 +170,15 @@ PageIndex Go provides an MCP (Model Context Protocol) server for integration wit
 go build -o pageindex-mcp ./cmd/mcp
 ```
 
-### Configure MCP Client
+### Transport Modes
+
+PageIndex MCP Server supports multiple transport modes:
+
+1. **stdio** (default) - For local integration with AI assistants
+2. **HTTP** (Streamable HTTP) - For remote access and multi-client scenarios
+3. **both** - Run both transports simultaneously
+
+### Stdio Transport (Local)
 
 **Claude Desktop** (`claude_desktop_config.json`):
 ```json
@@ -205,6 +213,56 @@ go build -o pageindex-mcp ./cmd/mcp
   }
 }
 ```
+
+### HTTP Transport (Remote)
+
+Run the MCP server with HTTP transport:
+
+```bash
+# Basic HTTP server
+./pageindex-mcp -transport http -addr :8080
+
+# With authentication
+./pageindex-mcp -transport http -auth-token "my-secret-token" -api-key "my-api-key"
+
+# Custom configuration
+./pageindex-mcp -transport http -endpoint /api/mcp -session-ttl 1h
+```
+
+**Remote MCP Client Configuration**:
+
+```json
+{
+  "mcpServers": {
+    "pageindex": {
+      "url": "http://your-server:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer my-secret-token"
+      }
+    }
+  }
+}
+```
+
+**CLI Flags for HTTP Transport**:
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-transport` | Transport mode: stdio, http, or both | "stdio" |
+| `-addr` | HTTP server address | ":8080" |
+| `-endpoint` | MCP endpoint path | "/mcp" |
+| `-auth-token` | Bearer token for authentication | "" |
+| `-api-key` | API Key (X-API-Key header) | "" |
+| `-session-ttl` | Session idle TTL | 30m |
+| `-enable-cors` | Enable CORS | true |
+| `-enable-health` | Enable health endpoints | true |
+
+**Health Endpoints**:
+
+- `GET /health` - Returns `{"status":"healthy","server":"MyPageIndexGo"}`
+- `GET /ready` - Returns `{"status":"ready","server":"MyPageIndexGo"}`
+
+**Security Note**: Always use authentication (`-auth-token` or `-api-key`) in production environments.
 
 ### Available Tools
 

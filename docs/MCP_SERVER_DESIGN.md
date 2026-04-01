@@ -16,8 +16,8 @@ MCP (Model Context Protocol) 是由 Anthropic 于 2024 年 11 月推出的开放
 
 ### 1.3 非目标
 
-- 不实现 HTTP/SSE 传输协议（当前版本）
-- 不实现认证机制（当前版本）
+- ~~不实现 HTTP/SSE 传输协议（当前版本）~~ ✅ 已实现 Streamable HTTP 传输
+- ~~不实现认证机制（当前版本）~~ ✅ 已实现认证机制
 - 不独立部署为单独进程（内嵌模式）
 
 ## 2. 技术选型
@@ -626,14 +626,67 @@ if srv != nil {
 | `pkg/mcp/server.go` | ~80 | MCP Server 初始化和运行 |
 | `pkg/mcp/tools.go` | ~350 | 工具定义和处理器实现 |
 | `pkg/mcp/types.go` | ~100 | 类型定义和 JSON Schema |
-| `cmd/mcp/main.go` | ~60 | 独立启动入口 |
-| **总计** | ~590 | |
+| `pkg/mcp/stdio.go` | ~45 | Stdio 服务器封装 |
+| `pkg/mcp/http.go` | ~215 | Streamable HTTP 服务器 |
+| `cmd/mcp/main.go` | ~135 | 多传输模式启动入口 |
+| **总计** | ~925 | |
 
 符合项目规范：静态语言单个文件不超过 250 行。
 
-## 11. 变更记录
+## 12. Streamable HTTP 传输
+
+### 12.1 概述
+
+根据 MCP 规范（2025-03-26+），**SSE 传输已被弃用**，取而代之的是 **Streamable HTTP** 传输协议。
+
+Streamable HTTP 特点：
+- 单端点设计（`/mcp`），而非 SSE 的双端点（`/sse` + `/message`）
+- 基于 HTTP POST/MCP JSON-RPC 直接通信
+- 支持会话管理（通过 `Mcp-Session-Id` 头）
+- 更适合现代 Web 架构和云部署
+
+### 12.2 配置选项
+
+```go
+type Config struct {
+    Addr         string        // HTTP 服务器地址，默认 ":8080"
+    Endpoint     string        // MCP 端点路径，默认 "/mcp"
+    AuthToken    string        // Bearer Token
+    APIKey       string        // API Key (X-API-Key 头)
+    SessionTTL   time.Duration // 会话存活时间，默认 30 分钟
+    EnableCORS   bool          // 启用 CORS，默认 true
+    EnableHealth bool          // 启用健康端点，默认 true
+}
+```
+
+### 12.3 使用示例
+
+```bash
+# 启动 HTTP 服务器
+./pageindex-mcp -transport http -addr :8080
+
+# 带认证
+./pageindex-mcp -transport http -auth-token "my-secret-token" -api-key "my-api-key"
+
+# 自定义配置
+./pageindex-mcp -transport http -endpoint /api/mcp -session-ttl 1h
+```
+
+### 12.4 健康端点
+
+- `GET /health` - 健康检查：`{"status":"healthy","server":"MyPageIndexGo"}`
+- `GET /ready` - 就绪检查：`{"status":"ready","server":"MyPageIndexGo"}`
+
+### 12.5 安全考虑
+
+1. **认证**: 生产环境必须启用认证
+2. **HTTPS**: 远程部署应使用反向代理终止 TLS
+3. **防火墙**: 限制访问端口仅受信任的客户端
+
+## 13. 变更记录
 
 | 日期 | 版本 | 描述 |
 |------|------|------|
+| 2026-04-01 | v1.2.0 | 添加 Streamable HTTP 传输、认证、CORS 支持 |
 | 2026-04-01 | v1.1.0 | 添加进度回调支持（notifications/progress） |
 | 2026-03-29 | v1.0.0 | 初始版本 |

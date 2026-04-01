@@ -546,4 +546,46 @@ TOC处理支持多种模式：
 
 6. **多格式扩展**：新增格式只需要实现 `DocumentParser` 接口，并在 `ParserRegistry` 注册
 
-7. **代码规范遵循**：所有代码必须通过`gofmt`格式化，并通过`golangci-lint`检查
+  7. **代码规范遵循**：所有代码必须通过`gofmt`格式化，并通过`golangci-lint`检查
+
+## MCP Server 规范（v1.2.0+）
+
+### 传输协议支持
+
+PageIndex MCP Server 支持两种传输协议：
+
+| 传输模式 | 协议 | 使用场景 | 配置方式 |
+|---------|------|----------|----------|
+| **stdio** | stdio | 本地 AI 助手（Claude Desktop, Cursor, Cline） | `-transport stdio` |
+| **HTTP** | Streamable HTTP | 远程访问、多客户端、云部署 | `-transport http` |
+
+### Streamable HTTP 特性
+
+- **单端点设计**: `/mcp` (替代 SSE 的双端点)
+- **会话管理**: `Mcp-Session-Id` HTTP 头
+- **认证**: Bearer Token / API Key
+- **CORS**: 跨域支持
+- **健康检查**: `/health`, `/ready` 端点
+
+### CLI 参数
+
+```bash
+./pageindex-mcp -transport http \
+  -addr :8080 \
+  -endpoint /mcp \
+  -auth-token "secret-token" \
+  -api-key "api-key-123" \
+  -session-ttl 30m \
+  -enable-cors true \
+  -enable-health true
+```
+
+### 生产部署建议
+
+1. **认证**: 必须启用 `-auth-token` 或 `-api-key`
+2. **TLS**: 使用 Nginx 反向代理终止 HTTPS
+3. **防火墙**: 限制访问 IP 范围
+4. **监控**: 集成 Prometheus 指标（未来）
+5. **限流**: 使用 Nginx 限流模块（未来）
+
+详见：`docs/MCP_STREAMABLE_HTTP_IMPLEMENTATION.md`

@@ -10,6 +10,8 @@ const (
 	MCPServerVersion = "1.0.0"
 )
 
+type MCPServer = server.MCPServer
+
 func NewMCPServer() *server.MCPServer {
 	s := server.NewMCPServer(MCPServerName, MCPServerVersion)
 	registerTools(s)
