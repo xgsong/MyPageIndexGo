@@ -45,6 +45,16 @@ func normalizeArabicToChinese(s string) string {
 	return s
 }
 
+// isChapterTitle checks if a title is a chapter title (e.g., "第一章 总则", "第1章 引言")
+func isChapterTitle(title string) bool {
+	if title == "" {
+		return false
+	}
+	// 检测中文章节标题模式：第X章，支持中文数字和阿拉伯数字
+	chapterPattern := regexp.MustCompile(`^第[零一二三四五六七八九十百千万\d]+章`)
+	return chapterPattern.MatchString(title)
+}
+
 // extractContentPreview extracts a preview from the page text for a node.
 // Returns the first meaningful content (up to maxChars) from the node's page range.
 func extractContentPreview(pageTextMap map[int]string, startPage, endPage int, maxChars int) string {
@@ -410,6 +420,39 @@ func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, pageTexts []string
 	// If single root node, ensure its EndPage covers all descendants
 	if len(rootNodes) == 1 {
 		root := rootNodes[0]
+		
+		// Check if the root node is a chapter title
+		// If it is, create a wrapper root node with generic title
+		if isChapterTitle(root.Title) {
+			// Calculate the max end page from all descendants
+			var maxEndPage int
+			var findMaxEndPage func(*document.Node)
+			findMaxEndPage = func(n *document.Node) {
+				if n.EndPage > maxEndPage {
+					maxEndPage = n.EndPage
+				}
+				for _, child := range n.Children {
+					findMaxEndPage(child)
+				}
+			}
+			findMaxEndPage(root)
+			if maxEndPage > root.EndPage {
+				root.EndPage = maxEndPage
+			}
+			
+			// Create a wrapper root node with generic title
+			wrapperRoot := document.NewNode("Document", 1, totalPages)
+			wrapperRoot.AddChild(root)
+			
+			// Ensure wrapper root covers all pages
+			if wrapperRoot.EndPage < root.EndPage {
+				wrapperRoot.EndPage = root.EndPage
+			}
+			
+			return wrapperRoot
+		}
+		
+		// Original logic for non-chapter single root node
 		// Calculate the max end page from all descendants
 		var maxEndPage int
 		var findMaxEndPage func(*document.Node)
