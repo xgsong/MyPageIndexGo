@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
 	"github.com/xgsong/mypageindexgo/pkg/indexer"
@@ -81,7 +82,19 @@ func generateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultErrorf("索引生成器创建失败：%v", err), nil
 	}
 
-	tree, err := generator.Generate(ctx, doc)
+	progressCb := func(done, total int, desc string) {
+		srv := server.ServerFromContext(ctx)
+		if srv != nil {
+			_ = srv.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
+				"progressToken": request.Params.Meta.ProgressToken,
+				"progress":      done,
+				"total":         total,
+				"message":       desc,
+			})
+		}
+	}
+
+	tree, err := generator.GenerateWithTOC(ctx, doc, progressCb)
 	if err != nil {
 		return mcp.NewToolResultErrorf("索引生成失败：%v", err), nil
 	}
@@ -125,10 +138,26 @@ func searchIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		return mcp.NewToolResultError("query 是必需参数"), nil
 	}
 
+	sendProgress := func(done, total int, desc string) {
+		srv := server.ServerFromContext(ctx)
+		if srv != nil {
+			_ = srv.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
+				"progressToken": request.Params.Meta.ProgressToken,
+				"progress":      done,
+				"total":         total,
+				"message":       desc,
+			})
+		}
+	}
+
+	sendProgress(1, 3, "Index loaded, starting search")
+
 	tree, err := output.LoadIndexTree(req.IndexPath)
 	if err != nil {
 		return mcp.NewToolResultErrorf("索引加载失败：%v", err), nil
 	}
+
+	sendProgress(1, 3, "Index loaded, starting search")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -146,6 +175,8 @@ func searchIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		llmClient = llm.NewCachedLLMClient(llmClient, cacheTTL, true)
 	}
 	searcher = indexer.NewSearcher(llmClient)
+
+	sendProgress(2, 3, "Searching with LLM")
 
 	result, err := searcher.Search(ctx, req.Query, tree)
 	if err != nil {
@@ -167,6 +198,8 @@ func searchIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 			EndPage:   node.EndPage,
 		})
 	}
+
+	sendProgress(3, 3, "Search complete")
 
 	response := SearchIndexResponse{
 		Success:         true,
@@ -195,6 +228,20 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		return mcp.NewToolResultError("new_file_path 是必需参数"), nil
 	}
 
+	sendProgress := func(done, total int, desc string) {
+		srv := server.ServerFromContext(ctx)
+		if srv != nil {
+			_ = srv.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
+				"progressToken": request.Params.Meta.ProgressToken,
+				"progress":      done,
+				"total":         total,
+				"message":       desc,
+			})
+		}
+	}
+
+	sendProgress(1, 6, "Loading existing index")
+
 	existingTree, err := output.LoadIndexTree(req.ExistingIndexPath)
 	if err != nil {
 		return mcp.NewToolResultErrorf("现有索引加载失败：%v", err), nil
@@ -217,6 +264,8 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		_ = file.Close()
 	}()
 
+	sendProgress(2, 6, "Parsing new document")
+
 	var parser document.DocumentParser
 	if ext == ".pdf" || ext == ".PDF" {
 		parser = document.NewPDFParser()
@@ -230,6 +279,8 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 	if err != nil {
 		return mcp.NewToolResultErrorf("文档解析失败：%v", err), nil
 	}
+
+	sendProgress(3, 6, "Loading configuration")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -250,6 +301,8 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		llmClient = llm.NewCachedLLMClient(llmClient, cacheTTL, true)
 	}
 
+	sendProgress(4, 6, "Generating index for new document")
+
 	generator, err := indexer.NewIndexGenerator(cfg, llmClient)
 	if err != nil {
 		return mcp.NewToolResultErrorf("索引生成器创建失败：%v", err), nil
@@ -259,6 +312,8 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 	if err != nil {
 		return mcp.NewToolResultErrorf("索引更新失败：%v", err), nil
 	}
+
+	sendProgress(5, 6, "Saving merged index")
 
 	outputPath := req.OutputPath
 	if outputPath == nil || *outputPath == "" {
@@ -281,6 +336,8 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 			TimeSeconds:   time.Since(startTime).Seconds(),
 		},
 	}
+
+	sendProgress(6, 6, "Update complete")
 
 	return marshalResult(response)
 }
