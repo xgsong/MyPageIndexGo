@@ -766,6 +766,55 @@ func TestGenerateTreeFromTOC_CompositeDeduplication(t *testing.T) {
 	assert.Equal(t, 3, tree.Children[1].StartPage)
 }
 
+func TestGenerateTreeFromTOC_ChineseArabicDeduplication(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mockLLM := &MockLLMClient{}
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	items := []TOCItem{
+		{Title: "第一章 总则", Structure: "1", PhysicalIndex: ptrInt(1)},
+		{Title: "第 1 章 总则", Structure: "1-DUP", PhysicalIndex: ptrInt(1)},
+		{Title: "第二章 分工理论", Structure: "2", PhysicalIndex: ptrInt(3)},
+		{Title: "第 2 章 分工理论", Structure: "2-DUP", PhysicalIndex: ptrInt(3)},
+		{Title: "第十章 总结", Structure: "10", PhysicalIndex: ptrInt(19)},
+		{Title: "第 10 章 总结", Structure: "10-DUP", PhysicalIndex: ptrInt(19)},
+	}
+
+	tree := gen.generateTreeFromTOC(items, []string{}, 21)
+	assert.NotNil(t, tree)
+	assert.Equal(t, 3, len(tree.Children))
+	assert.Contains(t, []string{"第一章 总则", "第 1 章 总则"}, tree.Children[0].Title)
+	assert.Contains(t, []string{"第二章 分工理论", "第 2 章 分工理论"}, tree.Children[1].Title)
+	assert.Contains(t, []string{"第十章 总结", "第 10 章 总结"}, tree.Children[2].Title)
+	assert.Equal(t, 1, tree.Children[0].StartPage)
+	assert.Equal(t, 3, tree.Children[0].EndPage)
+	assert.Equal(t, 3, tree.Children[1].StartPage)
+	assert.Equal(t, 19, tree.Children[1].EndPage)
+	assert.Equal(t, 19, tree.Children[2].StartPage)
+	assert.Equal(t, 21, tree.Children[2].EndPage)
+}
+
+func TestGenerateTreeFromTOC_MixedFormatDeduplication(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mockLLM := &MockLLMClient{}
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	assert.NoError(t, err)
+
+	items := []TOCItem{
+		{Title: "第 1 章 总则", Structure: "1", PhysicalIndex: ptrInt(1)},
+		{Title: "第一章 总则", Structure: "1-DUP", PhysicalIndex: ptrInt(1)},
+		{Title: "第 10 章 总结", Structure: "10", PhysicalIndex: ptrInt(19)},
+		{Title: "第十章 总结", Structure: "10-DUP", PhysicalIndex: ptrInt(19)},
+	}
+
+	tree := gen.generateTreeFromTOC(items, []string{}, 21)
+	assert.NotNil(t, tree)
+	assert.Equal(t, 2, len(tree.Children))
+	assert.Equal(t, "第 1 章 总则", tree.Children[0].Title)
+	assert.Equal(t, "第 10 章 总结", tree.Children[1].Title)
+}
+
 // Commented out: Tests for fixPageNumbers which doesn't exist in Python implementation
 // func TestFixPageNumbers_OverlappingSiblings(t *testing.T) {
 // 	cfg := config.DefaultConfig()

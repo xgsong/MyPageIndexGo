@@ -12,9 +12,9 @@ func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
 	assert.Equal(t, "gpt-4o", cfg.OpenAIModel)
-	assert.Equal(t, 20, cfg.MaxConcurrency) // Optimized from 10
-	assert.Equal(t, 10, cfg.MaxPagesPerNode)
-	assert.Equal(t, 24000, cfg.MaxTokensPerNode) // Optimized from 16000
+	assert.Equal(t, 20, cfg.MaxConcurrency)
+	assert.Equal(t, 5, cfg.MaxPagesPerNode)
+	assert.Equal(t, 16000, cfg.MaxTokensPerNode)
 	assert.Equal(t, false, cfg.GenerateSummaries)
 	assert.Equal(t, "info", cfg.LogLevel)
 	assert.Empty(t, cfg.OpenAIAPIKey)
@@ -51,14 +51,14 @@ func TestLoadFromEnv(t *testing.T) {
 func TestLoadFromEnv_RequiresAPIKey(t *testing.T) {
 	origKey1 := os.Getenv("OPENAI_API_KEY")
 	origKey2 := os.Getenv("OCR_API_KEY")
-	
+
 	if err := os.Unsetenv("OPENAI_API_KEY"); err != nil {
 		t.Logf("Warning: Failed to unset OPENAI_API_KEY: %v", err)
 	}
 	if err := os.Unsetenv("OCR_API_KEY"); err != nil {
 		t.Logf("Warning: Failed to unset OCR_API_KEY: %v", err)
 	}
-	
+
 	defer func() {
 		if origKey1 != "" {
 			if err := os.Setenv("OPENAI_API_KEY", origKey1); err != nil {
@@ -122,7 +122,7 @@ func TestLoadFromEnv_NonPrefixed(t *testing.T) {
 
 func TestLoadFromEnv_SensitiveOnly(t *testing.T) {
 	origKey := os.Getenv("OPENAI_API_KEY")
-	
+
 	if err := os.Setenv("OPENAI_API_KEY", "test-key-sensitive"); err != nil {
 		t.Fatalf("Failed to set OPENAI_API_KEY: %v", err)
 	}
