@@ -160,6 +160,84 @@ Options:
 - `--model gpt-4o-mini` - Custom model to use for generating new index
 - `--max-concurrency 10` - Maximum concurrent LLM calls
 
+## MCP Server
+
+PageIndex Go provides an MCP (Model Context Protocol) server for integration with AI assistants like Claude Desktop, Cursor, and Cline.
+
+### Build MCP Server
+
+```bash
+go build -o pageindex-mcp ./cmd/mcp
+```
+
+### Configure MCP Client
+
+**Claude Desktop** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "pageindex": {
+      "command": "/path/to/pageindex-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+**Cursor** (`.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "pageindex": {
+      "command": "/path/to/pageindex-mcp"
+    }
+  }
+}
+```
+
+**Cline** (VS Code Settings):
+```json
+{
+  "cline.mcpServers": {
+    "pageindex": {
+      "command": "/path/to/pageindex-mcp"
+    }
+  }
+}
+```
+
+### Available Tools
+
+#### generate_index
+
+Generate index from PDF or Markdown document.
+
+**Parameters:**
+- `file_path` (required): Document file path
+- `file_type` (optional): "pdf" or "markdown", auto-detected if not provided
+- `output_path` (optional): Output index file path, defaults to `{file_path}.index.json`
+- `model` (optional): LLM model to use, defaults to config.yaml setting
+- `max_concurrency` (optional): Maximum concurrent LLM calls
+- `generate_summaries` (optional): Whether to generate node summaries, defaults to false
+
+**Example:**
+```json
+{
+  "file_path": "/path/to/document.pdf",
+  "output_path": "/path/to/index.json",
+  "model": "gpt-4o",
+  "max_concurrency": 10
+}
+```
+
+#### search_index (Coming Soon)
+
+Search in generated index using LLM-based reasoning.
+
+#### update_index (Coming Soon)
+
+Incrementally update existing index with new documents.
+
 ## Example
 
 ```bash
