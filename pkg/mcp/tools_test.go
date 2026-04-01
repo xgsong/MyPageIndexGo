@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func newStringPtr(s string) *string {
+	return &s
+}
+
 func TestGenerateIndexHandler_MissingFilePath(t *testing.T) {
 	req := mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
@@ -636,4 +640,365 @@ func TestSearchIndexHandler_ErrorMessagesAreChinese(t *testing.T) {
 			assert.Contains(t, result.Content[0].(mcp.TextContent).Text, tc.expected)
 		})
 	}
+}
+
+func TestSearchIndexRequest_EmptyString(t *testing.T) {
+	args := map[string]any{
+		"index_path": "",
+		"query":      "",
+	}
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: args,
+		},
+	}
+
+	var boundReq SearchIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", boundReq.IndexPath)
+	assert.Equal(t, "", boundReq.Query)
+}
+
+func TestSearchIndexHandler_InvalidParameterTypes(t *testing.T) {
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "search_index",
+			Arguments: map[string]any{
+				"index_path": 123,
+				"query":      "test",
+			},
+		},
+	}
+
+	var boundReq SearchIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot unmarshal number")
+}
+
+func TestSearchIndexRequest_AllParameters(t *testing.T) {
+	args := map[string]any{
+		"index_path":  "/tmp/test.index.json",
+		"query":       "测试查询",
+		"output_path": "/tmp/result.json",
+		"model":       "gpt-4o",
+	}
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: args,
+		},
+	}
+
+	var boundReq SearchIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "/tmp/test.index.json", boundReq.IndexPath)
+	assert.Equal(t, "测试查询", boundReq.Query)
+	assert.Equal(t, "/tmp/result.json", *boundReq.OutputPath)
+	assert.Equal(t, "gpt-4o", *boundReq.Model)
+}
+
+func TestUpdateIndexRequest_MissingRequiredFields(t *testing.T) {
+	args := map[string]any{
+		"existing_index_path": "",
+		"new_file_path":       "",
+	}
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: args,
+		},
+	}
+
+	var boundReq UpdateIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", boundReq.ExistingIndexPath)
+	assert.Equal(t, "", boundReq.NewFilePath)
+}
+
+func TestUpdateIndexRequest_EmptyString(t *testing.T) {
+	args := map[string]any{
+		"existing_index_path": "",
+		"new_file_path":       "",
+	}
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: args,
+		},
+	}
+
+	var boundReq UpdateIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", boundReq.ExistingIndexPath)
+	assert.Equal(t, "", boundReq.NewFilePath)
+}
+
+func TestUpdateIndexRequest_InvalidParameterTypes(t *testing.T) {
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "update_index",
+			Arguments: map[string]any{
+				"existing_index_path": 123,
+				"new_file_path":       456,
+			},
+		},
+	}
+
+	var boundReq UpdateIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot unmarshal number")
+}
+
+func TestUpdateIndexRequest_PartialParameters(t *testing.T) {
+	args := map[string]any{
+		"existing_index_path": "/tmp/existing.index.json",
+		"new_file_path":       "/tmp/new.pdf",
+	}
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: args,
+		},
+	}
+
+	var boundReq UpdateIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "/tmp/existing.index.json", boundReq.ExistingIndexPath)
+	assert.Equal(t, "/tmp/new.pdf", boundReq.NewFilePath)
+	assert.Nil(t, boundReq.OutputPath)
+	assert.Nil(t, boundReq.Model)
+	assert.Nil(t, boundReq.MaxConcurrency)
+}
+
+func TestSearchIndexRequest_FloatModel(t *testing.T) {
+	args := map[string]any{
+		"index_path": "/tmp/test.index.json",
+		"query":      "test",
+		"model":      123.45,
+	}
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: args,
+		},
+	}
+
+	var boundReq SearchIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot unmarshal number")
+}
+
+func TestGenerateIndexRequest_NumberParameter(t *testing.T) {
+	args := map[string]any{
+		"file_path":          "/tmp/test.pdf",
+		"max_concurrency":    float64(20),
+		"generate_summaries": false,
+	}
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Arguments: args,
+		},
+	}
+
+	var boundReq GenerateIndexRequest
+	err := req.BindArguments(&boundReq)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 20, *boundReq.MaxConcurrency)
+	assert.Equal(t, false, *boundReq.GenerateSummaries)
+}
+
+func TestReferencedNode_EmptyFields(t *testing.T) {
+	node := ReferencedNode{}
+
+	data, err := json.Marshal(node)
+	assert.NoError(t, err)
+
+	var unmarshaled ReferencedNode
+	err = json.Unmarshal(data, &unmarshaled)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", unmarshaled.ID)
+	assert.Equal(t, "", unmarshaled.Title)
+	assert.Equal(t, 0, unmarshaled.StartPage)
+	assert.Equal(t, 0, unmarshaled.EndPage)
+}
+
+func TestSearchIndexResponse_EmptyReferencedNodes(t *testing.T) {
+	response := SearchIndexResponse{
+		Success:         true,
+		Query:           "test query",
+		Answer:          "test answer",
+		ReferencedNodes: []ReferencedNode{},
+		SearchTime:      1.0,
+	}
+
+	data, err := json.Marshal(response)
+	assert.NoError(t, err)
+
+	var unmarshaled SearchIndexResponse
+	err = json.Unmarshal(data, &unmarshaled)
+
+	assert.NoError(t, err)
+	assert.Equal(t, response, unmarshaled)
+	assert.Empty(t, unmarshaled.ReferencedNodes)
+}
+
+func TestMergeStats_ZeroValues(t *testing.T) {
+	stats := MergeStats{}
+
+	data, err := json.Marshal(stats)
+	assert.NoError(t, err)
+
+	var unmarshaled MergeStats
+	err = json.Unmarshal(data, &unmarshaled)
+
+	assert.NoError(t, err)
+	assert.Equal(t, stats, unmarshaled)
+	assert.Equal(t, 0, unmarshaled.OriginalPages)
+	assert.Equal(t, 0, unmarshaled.NewPages)
+	assert.Equal(t, 0.0, unmarshaled.TimeSeconds)
+}
+
+func TestIndexStats_ZeroValues(t *testing.T) {
+	stats := IndexStats{}
+
+	data, err := json.Marshal(stats)
+	assert.NoError(t, err)
+
+	var unmarshaled IndexStats
+	err = json.Unmarshal(data, &unmarshaled)
+
+	assert.NoError(t, err)
+	assert.Equal(t, stats, unmarshaled)
+}
+
+func TestGenerateIndexResponse_EmptyIndexPath(t *testing.T) {
+	response := GenerateIndexResponse{
+		Success:   true,
+		IndexPath: "",
+		Stats: IndexStats{
+			TotalPages:  0,
+			TotalNodes:  0,
+			TimeSeconds: 0.0,
+		},
+	}
+
+	data, err := json.Marshal(response)
+	assert.NoError(t, err)
+
+	var unmarshaled GenerateIndexResponse
+	err = json.Unmarshal(data, &unmarshaled)
+
+	assert.NoError(t, err)
+	assert.Equal(t, response, unmarshaled)
+}
+
+func TestSearchIndexHandler_WithValidIndexFile(t *testing.T) {
+	tmpIndexFile := "/tmp/test_valid_index_file.index.json"
+	tmpResultFile := "/tmp/test_search_result_file.json"
+
+	indexContent := `{
+		"root": {
+			"id": "test-root",
+			"title": "Test Document",
+			"start_page": 1,
+			"end_page": 10,
+			"children": []
+		},
+		"total_pages": 10,
+		"document_info": "测试文档",
+		"generated_at": "2024-01-01T00:00:00Z",
+		"last_modified": "2024-01-01T00:00:00Z"
+	}`
+
+	err := os.WriteFile(tmpIndexFile, []byte(indexContent), 0644)
+	assert.NoError(t, err)
+	defer func() {
+		_ = os.Remove(tmpIndexFile)
+		_ = os.Remove(tmpResultFile)
+	}()
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "search_index",
+			Arguments: map[string]any{
+				"index_path":  tmpIndexFile,
+				"query":       "测试查询",
+				"output_path": tmpResultFile,
+			},
+		},
+	}
+
+	result, err := searchIndexHandler(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "配置加载失败")
+}
+
+func TestSearchIndexHandler_ContextCancellation(t *testing.T) {
+	tmpIndexFile := "/tmp/test_valid_index_ctx_cancel.index.json"
+	tmpResultFile := "/tmp/test_context_cancel_result.json"
+
+	indexContent := `{
+		"root": {
+			"id": "test-root",
+			"title": "Test Document",
+			"start_page": 1,
+			"end_page": 10,
+			"children": []
+		},
+		"total_pages": 10,
+		"document_info": "测试文档",
+		"generated_at": "2024-01-01T00:00:00Z",
+		"last_modified": "2024-01-01T00:00:00Z"
+	}`
+
+	err := os.WriteFile(tmpIndexFile, []byte(indexContent), 0644)
+	assert.NoError(t, err)
+	defer func() {
+		_ = os.Remove(tmpIndexFile)
+		_ = os.Remove(tmpResultFile)
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "search_index",
+			Arguments: map[string]any{
+				"index_path":  tmpIndexFile,
+				"query":       "test query",
+				"output_path": tmpResultFile,
+			},
+		},
+	}
+
+	result, err := searchIndexHandler(ctx, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "配置加载失败")
 }
