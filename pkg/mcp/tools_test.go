@@ -49,7 +49,7 @@ func TestGenerateIndexHandler_FileNotFound(t *testing.T) {
 }
 
 func TestGenerateIndexHandler_UnsupportedFormat(t *testing.T) {
-	tmpFile := "/tmp/test_unsupported.txt"
+	tmpFile := os.TempDir() + "/test_unsupported.txt"
 	f, err := os.Create(tmpFile)
 	assert.NoError(t, err)
 	defer func() {
@@ -75,9 +75,9 @@ func TestGenerateIndexHandler_UnsupportedFormat(t *testing.T) {
 
 func TestGenerateIndexRequest_BindArguments(t *testing.T) {
 	args := map[string]any{
-		"file_path":          "/tmp/test.pdf",
+		"file_path":          os.TempDir() + "/test.pdf",
 		"file_type":          "pdf",
-		"output_path":        "/tmp/output.json",
+		"output_path":        os.TempDir() + "/output.json",
 		"model":              "gpt-4o",
 		"max_concurrency":    float64(10),
 		"generate_summaries": true,
@@ -93,9 +93,9 @@ func TestGenerateIndexRequest_BindArguments(t *testing.T) {
 	err := req.BindArguments(&boundReq)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/test.pdf", boundReq.FilePath)
+	assert.Equal(t, os.TempDir()+"/test.pdf", boundReq.FilePath)
 	assert.Equal(t, "pdf", *boundReq.FileType)
-	assert.Equal(t, "/tmp/output.json", *boundReq.OutputPath)
+	assert.Equal(t, os.TempDir()+"/output.json", *boundReq.OutputPath)
 	assert.Equal(t, "gpt-4o", *boundReq.Model)
 	assert.Equal(t, 10, *boundReq.MaxConcurrency)
 	assert.Equal(t, true, *boundReq.GenerateSummaries)
@@ -124,7 +124,7 @@ func TestSearchIndexHandler_MissingQuery(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "search_index",
 			Arguments: map[string]any{
-				"index_path": "/tmp/test.index.json",
+				"index_path": os.TempDir() + "/test.index.json",
 				"query":      "",
 			},
 		},
@@ -156,8 +156,8 @@ func TestSearchIndexHandler_IndexFileNotFound(t *testing.T) {
 }
 
 func TestUpdateIndexHandler_ConfigLoadFailure(t *testing.T) {
-	tmpIndexFile := "/tmp/test_update_config.index.json"
-	tmpNewFile := "/tmp/test_new.md"
+	tmpIndexFile := os.TempDir() + "/test_update_config.index.json"
+	tmpNewFile := os.TempDir() + "/test_new.md"
 
 	indexContent := `{
 		"root": {"id": "root", "title": "Test", "start_page": 1, "end_page": 10, "children": []},
@@ -197,7 +197,7 @@ func TestUpdateIndexHandler_ConfigLoadFailure(t *testing.T) {
 func TestMarshalResult_Success(t *testing.T) {
 	data := GenerateIndexResponse{
 		Success:   true,
-		IndexPath: "/tmp/test.index.json",
+		IndexPath: os.TempDir() + "/test.index.json",
 		Stats: IndexStats{
 			TotalPages:  10,
 			TotalNodes:  5,
@@ -235,7 +235,7 @@ func TestGenerateIndexHandler_PartialParameters(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "generate_index",
 			Arguments: map[string]any{
-				"file_path": "/tmp/test.pdf",
+				"file_path": os.TempDir() + "/test.pdf",
 			},
 		},
 	}
@@ -244,7 +244,7 @@ func TestGenerateIndexHandler_PartialParameters(t *testing.T) {
 	err := req.BindArguments(&boundReq)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/test.pdf", boundReq.FilePath)
+	assert.Equal(t, os.TempDir()+"/test.pdf", boundReq.FilePath)
 	assert.Nil(t, boundReq.FileType)
 	assert.Nil(t, boundReq.OutputPath)
 	assert.Nil(t, boundReq.Model)
@@ -257,7 +257,7 @@ func TestGenerateIndexHandler_InvalidParameterTypes(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "generate_index",
 			Arguments: map[string]any{
-				"file_path":       "/tmp/test.pdf",
+				"file_path":       os.TempDir() + "/test.pdf",
 				"max_concurrency": "invalid",
 			},
 		},
@@ -272,7 +272,7 @@ func TestGenerateIndexHandler_InvalidParameterTypes(t *testing.T) {
 
 func TestGenerateIndexRequest_BindArgumentsWithDefaults(t *testing.T) {
 	args := map[string]any{
-		"file_path": "/tmp/test.md",
+		"file_path": os.TempDir() + "/test.md",
 	}
 
 	req := mcp.CallToolRequest{
@@ -285,7 +285,7 @@ func TestGenerateIndexRequest_BindArgumentsWithDefaults(t *testing.T) {
 	err := req.BindArguments(&boundReq)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/test.md", boundReq.FilePath)
+	assert.Equal(t, os.TempDir()+"/test.md", boundReq.FilePath)
 }
 
 func TestGenerateIndexRequest_FileTypeExtensions(t *testing.T) {
@@ -295,12 +295,12 @@ func TestGenerateIndexRequest_FileTypeExtensions(t *testing.T) {
 		isPDF      bool
 		isMarkdown bool
 	}{
-		{"PDF lowercase", "/tmp/test.pdf", true, false},
-		{"PDF uppercase", "/tmp/test.PDF", true, false},
-		{"Markdown md", "/tmp/test.md", false, true},
-		{"Markdown markdown", "/tmp/test.markdown", false, true},
-		{"Mixed case PDF", "/tmp/test.Pdf", false, false},
-		{"Mixed case MD", "/tmp/test.Md", false, false},
+		{"PDF lowercase", os.TempDir() + "/test.pdf", true, false},
+		{"PDF uppercase", os.TempDir() + "/test.PDF", true, false},
+		{"Markdown md", os.TempDir() + "/test.md", false, true},
+		{"Markdown markdown", os.TempDir() + "/test.markdown", false, true},
+		{"Mixed case PDF", os.TempDir() + "/test.Pdf", false, false},
+		{"Mixed case MD", os.TempDir() + "/test.Md", false, false},
 	}
 
 	for _, tc := range testCases {
@@ -373,7 +373,7 @@ func TestMergeStats_JsonSerialization(t *testing.T) {
 func TestGenerateIndexResponse_JsonSerialization(t *testing.T) {
 	response := GenerateIndexResponse{
 		Success:   true,
-		IndexPath: "/tmp/test.index.json",
+		IndexPath: os.TempDir() + "/test.index.json",
 		Stats: IndexStats{
 			TotalPages:  50,
 			TotalNodes:  10,
@@ -434,7 +434,7 @@ func TestSearchIndexResponse_JsonSerialization(t *testing.T) {
 func TestUpdateIndexResponse_JsonSerialization(t *testing.T) {
 	response := UpdateIndexResponse{
 		Success:    true,
-		OutputPath: "/tmp/merged.index.json",
+		OutputPath: os.TempDir() + "/merged.index.json",
 		Stats: MergeStats{
 			OriginalPages: 50,
 			NewPages:      25,
@@ -455,11 +455,11 @@ func TestUpdateIndexResponse_JsonSerialization(t *testing.T) {
 }
 
 func TestGenerateIndexHandler_ContextCancellation(t *testing.T) {
-	tmpFile, err := os.Create("/tmp/test_ctx.pdf")
+	tmpFile, err := os.Create(os.TempDir() + "/test_ctx.pdf")
 	assert.NoError(t, err)
 	defer func() {
 		_ = tmpFile.Close()
-		_ = os.Remove("/tmp/test_ctx.pdf")
+		_ = os.Remove(os.TempDir() + "/test_ctx.pdf")
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -543,7 +543,7 @@ func TestGenerateIndexRequest_EmptyString(t *testing.T) {
 
 func TestSearchIndexRequest_BindArguments(t *testing.T) {
 	args := map[string]any{
-		"index_path": "/tmp/test.index.json",
+		"index_path": os.TempDir() + "/test.index.json",
 		"query":      "测试查询",
 		"model":      "gpt-4o",
 	}
@@ -558,14 +558,14 @@ func TestSearchIndexRequest_BindArguments(t *testing.T) {
 	err := req.BindArguments(&boundReq)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/test.index.json", boundReq.IndexPath)
+	assert.Equal(t, os.TempDir()+"/test.index.json", boundReq.IndexPath)
 	assert.Equal(t, "测试查询", boundReq.Query)
 	assert.Equal(t, "gpt-4o", *boundReq.Model)
 }
 
 func TestSearchIndexRequest_MissingRequiredFields(t *testing.T) {
 	args := map[string]any{
-		"index_path": "/tmp/test.index.json",
+		"index_path": os.TempDir() + "/test.index.json",
 	}
 
 	req := mcp.CallToolRequest{
@@ -578,14 +578,14 @@ func TestSearchIndexRequest_MissingRequiredFields(t *testing.T) {
 	err := req.BindArguments(&boundReq)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/test.index.json", boundReq.IndexPath)
+	assert.Equal(t, os.TempDir()+"/test.index.json", boundReq.IndexPath)
 	assert.Equal(t, "", boundReq.Query)
 }
 
 func TestUpdateIndexRequest_BindArguments(t *testing.T) {
 	args := map[string]any{
-		"existing_index_path": "/tmp/existing.index.json",
-		"new_file_path":       "/tmp/new.pdf",
+		"existing_index_path": os.TempDir() + "/existing.index.json",
+		"new_file_path":       os.TempDir() + "/new.pdf",
 		"model":               "gpt-4o-mini",
 		"max_concurrency":     float64(5),
 	}
@@ -600,8 +600,8 @@ func TestUpdateIndexRequest_BindArguments(t *testing.T) {
 	err := req.BindArguments(&boundReq)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/existing.index.json", boundReq.ExistingIndexPath)
-	assert.Equal(t, "/tmp/new.pdf", boundReq.NewFilePath)
+	assert.Equal(t, os.TempDir()+"/existing.index.json", boundReq.ExistingIndexPath)
+	assert.Equal(t, os.TempDir()+"/new.pdf", boundReq.NewFilePath)
 	assert.Equal(t, "gpt-4o-mini", *boundReq.Model)
 	assert.Equal(t, 5, *boundReq.MaxConcurrency)
 }
@@ -631,7 +631,7 @@ func TestSearchIndexHandler_ErrorMessagesAreChinese(t *testing.T) {
 				Params: mcp.CallToolParams{
 					Name: "search_index",
 					Arguments: map[string]any{
-						"index_path": "/tmp/test.index.json",
+						"index_path": os.TempDir() + "/test.index.json",
 						"query":      "",
 					},
 				},
@@ -703,9 +703,9 @@ func TestSearchIndexHandler_InvalidParameterTypes(t *testing.T) {
 
 func TestSearchIndexRequest_AllParameters(t *testing.T) {
 	args := map[string]any{
-		"index_path":  "/tmp/test.index.json",
+		"index_path":  os.TempDir() + "/test.index.json",
 		"query":       "测试查询",
-		"output_path": "/tmp/result.json",
+		"output_path": os.TempDir() + "/result.json",
 		"model":       "gpt-4o",
 	}
 
@@ -719,9 +719,9 @@ func TestSearchIndexRequest_AllParameters(t *testing.T) {
 	err := req.BindArguments(&boundReq)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/test.index.json", boundReq.IndexPath)
+	assert.Equal(t, os.TempDir()+"/test.index.json", boundReq.IndexPath)
 	assert.Equal(t, "测试查询", boundReq.Query)
-	assert.Equal(t, "/tmp/result.json", *boundReq.OutputPath)
+	assert.Equal(t, os.TempDir()+"/result.json", *boundReq.OutputPath)
 	assert.Equal(t, "gpt-4o", *boundReq.Model)
 }
 
@@ -806,7 +806,7 @@ func TestUpdateIndexHandler_MissingNewFilePath(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "update_index",
 			Arguments: map[string]any{
-				"existing_index_path": "/tmp/existing.index.json",
+				"existing_index_path": os.TempDir() + "/existing.index.json",
 				"new_file_path":       "",
 			},
 		},
@@ -838,7 +838,7 @@ func TestUpdateIndexHandler_NonExistentIndexPath(t *testing.T) {
 }
 
 func TestUpdateIndexHandler_NonExistentNewFile(t *testing.T) {
-	tmpIndexFile := "/tmp/test_update_existing.index.json"
+	tmpIndexFile := os.TempDir() + "/test_update_existing.index.json"
 	indexContent := `{
 		"root": {"id": "root", "title": "Test", "start_page": 1, "end_page": 10, "children": []},
 		"total_pages": 10,
@@ -870,8 +870,8 @@ func TestUpdateIndexHandler_NonExistentNewFile(t *testing.T) {
 }
 
 func TestUpdateIndexHandler_UnsupportedFormat(t *testing.T) {
-	tmpIndexFile := "/tmp/test_update_fmt.index.json"
-	tmpNewFile := "/tmp/test_unsupported.txt"
+	tmpIndexFile := os.TempDir() + "/test_update_fmt.index.json"
+	tmpNewFile := os.TempDir() + "/test_unsupported.txt"
 
 	indexContent := `{
 		"root": {"id": "root", "title": "Test", "start_page": 1, "end_page": 10, "children": []},
@@ -910,8 +910,8 @@ func TestUpdateIndexHandler_UnsupportedFormat(t *testing.T) {
 
 func TestUpdateIndexRequest_PartialParameters(t *testing.T) {
 	args := map[string]any{
-		"existing_index_path": "/tmp/existing.index.json",
-		"new_file_path":       "/tmp/new.pdf",
+		"existing_index_path": os.TempDir() + "/existing.index.json",
+		"new_file_path":       os.TempDir() + "/new.pdf",
 	}
 
 	req := mcp.CallToolRequest{
@@ -924,8 +924,8 @@ func TestUpdateIndexRequest_PartialParameters(t *testing.T) {
 	err := req.BindArguments(&boundReq)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/existing.index.json", boundReq.ExistingIndexPath)
-	assert.Equal(t, "/tmp/new.pdf", boundReq.NewFilePath)
+	assert.Equal(t, os.TempDir()+"/existing.index.json", boundReq.ExistingIndexPath)
+	assert.Equal(t, os.TempDir()+"/new.pdf", boundReq.NewFilePath)
 	assert.Nil(t, boundReq.OutputPath)
 	assert.Nil(t, boundReq.Model)
 	assert.Nil(t, boundReq.MaxConcurrency)
@@ -933,7 +933,7 @@ func TestUpdateIndexRequest_PartialParameters(t *testing.T) {
 
 func TestSearchIndexRequest_FloatModel(t *testing.T) {
 	args := map[string]any{
-		"index_path": "/tmp/test.index.json",
+		"index_path": os.TempDir() + "/test.index.json",
 		"query":      "test",
 		"model":      123.45,
 	}
@@ -953,7 +953,7 @@ func TestSearchIndexRequest_FloatModel(t *testing.T) {
 
 func TestGenerateIndexRequest_NumberParameter(t *testing.T) {
 	args := map[string]any{
-		"file_path":          "/tmp/test.pdf",
+		"file_path":          os.TempDir() + "/test.pdf",
 		"max_concurrency":    float64(20),
 		"generate_summaries": false,
 	}
@@ -1059,8 +1059,8 @@ func TestGenerateIndexResponse_EmptyIndexPath(t *testing.T) {
 }
 
 func TestSearchIndexHandler_WithValidIndexFile(t *testing.T) {
-	tmpIndexFile := "/tmp/test_valid_index_file.index.json"
-	tmpResultFile := "/tmp/test_search_result_file.json"
+	tmpIndexFile := os.TempDir() + "/test_valid_index_file.index.json"
+	tmpResultFile := os.TempDir() + "/test_search_result_file.json"
 
 	indexContent := `{
 		"root": {
@@ -1103,8 +1103,8 @@ func TestSearchIndexHandler_WithValidIndexFile(t *testing.T) {
 }
 
 func TestSearchIndexHandler_ContextCancellation(t *testing.T) {
-	tmpIndexFile := "/tmp/test_valid_index_ctx_cancel.index.json"
-	tmpResultFile := "/tmp/test_context_cancel_result.json"
+	tmpIndexFile := os.TempDir() + "/test_valid_index_ctx_cancel.index.json"
+	tmpResultFile := os.TempDir() + "/test_context_cancel_result.json"
 
 	indexContent := `{
 		"root": {
