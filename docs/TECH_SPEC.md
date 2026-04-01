@@ -46,7 +46,8 @@ mypageindexgo/
 │   │   ├── openai.go           # OpenAI GPT实现
 │   │   ├── prompts.go          # Prompt模板
 │   │   ├── cached_client.go    # LLM响应缓存
-│   │   └── lru_cache.go        # LRU缓存实现
+│   │   ├── lru_cache.go        # LRU缓存实现
+│   │   └── model_limits.go     # 模型上下文限制检测
 │   ├── indexer/
 │   │   ├── generator.go        # IndexGenerator 主入口
 │   │   ├── generator_toc.go     # GenerateWithTOC 核心流程

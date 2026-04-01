@@ -373,7 +373,6 @@ defer file.Close() // nolint:errcheck // File cleanup in CLI command
 - 性能优化考虑周全
 
 ### 优先改进建议
-
 | 优先级 | 问题 | 状态 | 建议 |
 |--------|------|------|------|
 | 高 | indexer 目录文件过多 | ⏳ 待处理 | 按功能拆分子目录 |
@@ -381,4 +380,5 @@ defer file.Close() // nolint:errcheck // File cleanup in CLI command
 | 中 | 大节点拆分功能禁用 | ✅ **已完成** | 已完全移除相关死代码 |
 | 中 | TOCItem 字段类型不一致 | ✅ **已完成** | 已统一为指针类型 |
 | 低 | 硬编码配置值 | ✅ **已完成** | 已提取为配置项 |
+| 低 | 批量处理token超限 | ✅ **已完成** | 已实现模型感知的批量限制 |
 | 低 | 缺少向量检索支持 | ⏳ 待处理 | 考虑添加 Embedding 接口 |

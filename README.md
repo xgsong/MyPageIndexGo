@@ -448,6 +448,7 @@ We are continuously optimizing performance to handle even larger workloads:
 | Dynamic concurrency control | 30%-100% faster index generation, better API quota utilization | ✅ Completed |
 | Index tree serialization optimization | 2x-5x faster serialization/deserialization, 30% lower memory usage | ✅ Completed |
 | Batch LLM calls | 50%-70% reduction in API calls for summary generation | ✅ Completed |
+| Model-aware batch token limits | 61% reduction in token usage, prevents API 400 errors | ✅ Completed |
 | Incremental index support | 10x-100x faster index updates, no need for full re-generation | ✅ Completed |
 | Streaming document processing | 40%-60% lower memory usage, support for GB-sized documents | 📋 Planned |
 
@@ -901,6 +902,7 @@ mypageindexgo/
 - [x] 节点 ID 哈希索引，提升搜索速度 ✅
 - [x] 动态并发控制与速率限制自适应 ✅
 - [x] 摘要生成批量 LLM 调用 ✅
+- [x] 模型感知的批量 token 限制，防止 API 400 错误 ✅
 - [x] 索引树序列化优化，提升读写速度 ✅
 - [x] 增量索引支持，避免全量重新生成 ✅
 - [x] verifyTOC 和摘要生成的并发调用 ✅
