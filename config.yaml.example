@@ -61,6 +61,15 @@ toc_check_page_num: 20
 # Maximum tokens per node for large node recursion
 max_token_num_each_node: 20000
 
+# Sample size for language detection (in runes)
+language_detect_sample_size: 2000
+
+# Maximum retry attempts for TOC extraction
+toc_extraction_max_attempts: 5
+
+# Maximum tokens per group for page grouping
+max_tokens_per_group: 20000
+
 # -----------------------------------------------------------------------------
 # Performance Optimization
 # -----------------------------------------------------------------------------

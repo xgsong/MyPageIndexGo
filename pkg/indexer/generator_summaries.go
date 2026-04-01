@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"sort"
+	"sync"
 	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
@@ -59,30 +59,11 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 				return fmt.Errorf("rate limiter wait failed: %w", err)
 			}
 
-			// Pre-calculate approximate size for efficiency
-			totalLen := 0
-			for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
-				if text, ok := g.pageTextMap[pageNum]; ok {
-					totalLen += len(text) + 2
-				}
-			}
+			// Get node text and token count using cached helper
+			text, _ := g.getNodeTextAndTokens(node)
 
-			// Use pooled builder to reduce allocations
-			nodeText := pool.GetBuilder()
-			defer pool.PutBuilder(nodeText)
-
-			if totalLen > 0 {
-				nodeText.Grow(totalLen)
-			}
-			for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
-				if text, ok := g.pageTextMap[pageNum]; ok {
-					nodeText.WriteString(text)
-					nodeText.WriteString("\n\n")
-				}
-			}
-
-			if nodeText.Len() > 0 {
-				if err := g.GenerateSummariesForNode(ctx, node, nodeText.String()); err != nil {
+			if text != "" {
+				if err := g.GenerateSummariesForNode(ctx, node, text); err != nil {
 					return err
 				}
 			}
@@ -101,6 +82,13 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 	return eg.Wait()
 }
 
+// nodeWithText represents a node with its text content and token count
+type nodeWithText struct {
+	node   *document.Node
+	text   string
+	tokens int
+}
+
 // generateAllSummariesBatch processes nodes in batches.
 func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []*document.Node, progressCb ProgressCallback, startPercent, endPercent int) error {
 	batchSize := g.cfg.BatchSize
@@ -108,42 +96,24 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 		batchSize = 20
 	}
 
-	maxTotalTokens := 100000
-	if g.cfg.MaxTokensPerNode > 0 {
-		maxTotalTokens = g.cfg.MaxTokensPerNode * 6
+	// Get safe token limit based on the model
+	maxTotalTokens := llm.GetSafeBatchTokenLimit(g.cfg.OpenAIModel)
+	if maxTotalTokens <= 0 {
+		// Fallback to conservative limit
+		maxTotalTokens = 30000
+	}
+
+	// Also respect the configured max tokens per node
+	if g.cfg.MaxTokensPerNode > 0 && g.cfg.MaxTokensPerNode*3 < maxTotalTokens {
+		maxTotalTokens = g.cfg.MaxTokensPerNode * 3
 	}
 
 	totalNodes := len(nodes)
-	type nodeWithText struct {
-		node   *document.Node
-		text   string
-		tokens int
-	}
 	var nodesWithText []nodeWithText
 	for _, node := range nodes {
-		// Pre-calculate approximate size for efficiency
-		totalLen := 0
-		for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
-			if text, ok := g.pageTextMap[pageNum]; ok {
-				totalLen += len(text) + 2
-			}
-		}
-
-		// Use pooled builder to reduce allocations
-		nodeText := pool.GetBuilder()
-		if totalLen > 0 {
-			nodeText.Grow(totalLen)
-		}
-		for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
-			if text, ok := g.pageTextMap[pageNum]; ok {
-				nodeText.WriteString(text)
-				nodeText.WriteString("\n\n")
-			}
-		}
-		text := nodeText.String()
-		pool.PutBuilder(nodeText) // Return to pool after use
-
-		tokens := g.tokenizer.Count(text)
+		// Get node text and token count using cached helper
+		text, tokens := g.getNodeTextAndTokens(node)
+		
 		nodesWithText = append(nodesWithText, nodeWithText{
 			node:   node,
 			text:   text,
@@ -159,34 +129,8 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 	)
 	eg.SetLimit(summaryConcurrency)
 
-	var batches [][]nodeWithText
-
-	// Use First Fit Decreasing bin-packing for better batch utilization
-	// Sort nodes by token count (descending) for better packing
-	sortedNodesWithText := make([]nodeWithText, len(nodesWithText))
-	copy(sortedNodesWithText, nodesWithText)
-	sort.Slice(sortedNodesWithText, func(i, j int) bool {
-		return sortedNodesWithText[i].tokens > sortedNodesWithText[j].tokens
-	})
-
-	// First Fit Decreasing packing
-	for _, nwt := range sortedNodesWithText {
-		placed := false
-		for i := range batches {
-			batchTokens := 0
-			for _, batchItem := range batches[i] {
-				batchTokens += batchItem.tokens
-			}
-			if len(batches[i]) < batchSize && batchTokens+nwt.tokens <= maxTotalTokens {
-				batches[i] = append(batches[i], nwt)
-				placed = true
-				break
-			}
-		}
-		if !placed {
-			batches = append(batches, []nodeWithText{nwt})
-		}
-	}
+	// Create batches using improved bin-packing algorithm
+	batches := g.createBatchesWithSmartPacking(nodesWithText, batchSize, maxTotalTokens)
 
 	var completedNodes atomic.Int32
 
@@ -277,4 +221,209 @@ func (g *IndexGenerator) GenerateSummariesForNode(ctx context.Context, node *doc
 
 	node.Summary = summary
 	return nil
+}
+
+// nodeTextCacheEntry represents a cached entry for node text and token count
+type nodeTextCacheEntry struct {
+	text   string
+	tokens int
+}
+
+// nodeTextCache is a simple cache for node text to avoid repeated calculations
+var (
+	nodeTextCache     = make(map[string]*nodeTextCacheEntry)
+	nodeTextCacheLock sync.RWMutex
+)
+
+// getNodeTextAndTokens returns the text content and token count for a node.
+// It uses caching to avoid repeated calculations for the same node.
+func (g *IndexGenerator) getNodeTextAndTokens(node *document.Node) (string, int) {
+	// Generate a cache key based on node properties
+	cacheKey := fmt.Sprintf("%s:%d:%d", node.ID, node.StartPage, node.EndPage)
+	
+	// Check cache first
+	nodeTextCacheLock.RLock()
+	if entry, ok := nodeTextCache[cacheKey]; ok {
+		nodeTextCacheLock.RUnlock()
+		return entry.text, entry.tokens
+	}
+	nodeTextCacheLock.RUnlock()
+	
+	// Not in cache, calculate
+	text := g.buildNodeText(node)
+	tokens := g.tokenizer.Count(text)
+	
+	// Store in cache
+	nodeTextCacheLock.Lock()
+	// Limit cache size to prevent memory leak
+	if len(nodeTextCache) < 1000 {
+		nodeTextCache[cacheKey] = &nodeTextCacheEntry{
+			text:   text,
+			tokens: tokens,
+		}
+	}
+	nodeTextCacheLock.Unlock()
+	
+	return text, tokens
+}
+
+// buildNodeText builds the text content for a node by concatenating page texts.
+// It performs a single pass through the pages to both calculate size and build text.
+func (g *IndexGenerator) buildNodeText(node *document.Node) string {
+	// Use pooled builder to reduce allocations
+	builder := pool.GetBuilder()
+	defer pool.PutBuilder(builder)
+	
+	// Calculate total length and build text in a single pass
+	// First, estimate total length for efficient allocation
+	totalLen := 0
+	for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
+		if text, ok := g.pageTextMap[pageNum]; ok {
+			totalLen += len(text) + 2 // +2 for "\n\n"
+		}
+	}
+	
+	if totalLen > 0 {
+		builder.Grow(totalLen)
+	}
+	
+	// Build the text
+	for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
+		if text, ok := g.pageTextMap[pageNum]; ok {
+			builder.WriteString(text)
+			builder.WriteString("\n\n")
+		}
+	}
+	
+	return builder.String()
+}
+
+// createBatchesWithSmartPacking creates batches using an improved bin-packing algorithm
+// that handles large nodes and respects token limits more accurately.
+func (g *IndexGenerator) createBatchesWithSmartPacking(nodesWithText []nodeWithText, batchSize, maxTotalTokens int) [][]nodeWithText {
+	var batches [][]nodeWithText
+	
+	// Separate nodes into categories based on size
+	var hugeNodes []nodeWithText    // > 80% of limit
+	var largeNodes []nodeWithText   // 50-80% of limit
+	var mediumNodes []nodeWithText  // 20-50% of limit
+	var smallNodes []nodeWithText   // < 20% of limit
+	
+	for _, nwt := range nodesWithText {
+		if nwt.tokens > maxTotalTokens*80/100 {
+			// Huge node that exceeds 80% of limit - needs special handling
+			hugeNodes = append(hugeNodes, nwt)
+		} else if nwt.tokens > maxTotalTokens/2 {
+			// Large node that needs its own batch
+			largeNodes = append(largeNodes, nwt)
+		} else if nwt.tokens > maxTotalTokens/5 {
+			// Medium node
+			mediumNodes = append(mediumNodes, nwt)
+		} else {
+			// Small node
+			smallNodes = append(smallNodes, nwt)
+		}
+	}
+	
+	// Process huge nodes - they need to be split or handled individually
+	for _, nwt := range hugeNodes {
+		// For now, put each huge node in its own batch
+		// In the future, we could split the text into chunks
+		batches = append(batches, []nodeWithText{nwt})
+	}
+	
+	// Process large nodes - each gets its own batch
+	for _, nwt := range largeNodes {
+		batches = append(batches, []nodeWithText{nwt})
+	}
+	
+	// Process medium and small nodes using improved bin-packing
+	allNormalNodes := append(mediumNodes, smallNodes...)
+	if len(allNormalNodes) > 0 {
+		// Sort nodes by token count (descending) for better packing
+		sortedNodes := make([]nodeWithText, len(allNormalNodes))
+		copy(sortedNodes, allNormalNodes)
+		// Simple bubble sort since n is small
+		for i := 0; i < len(sortedNodes); i++ {
+			for j := i + 1; j < len(sortedNodes); j++ {
+				if sortedNodes[i].tokens < sortedNodes[j].tokens {
+					sortedNodes[i], sortedNodes[j] = sortedNodes[j], sortedNodes[i]
+				}
+			}
+		}
+		
+		// First Fit Decreasing packing with dynamic batch limits
+		for _, nwt := range sortedNodes {
+			placed := false
+			for i := range batches {
+				// Skip batches that already have a huge or large node
+				if len(batches[i]) == 1 {
+					firstNodeTokens := batches[i][0].tokens
+					if firstNodeTokens > maxTotalTokens/2 {
+						// This batch already has a large or huge node
+						continue
+					}
+				}
+				
+				// Calculate current batch tokens with overhead
+				batchTokens := 0
+				for _, batchItem := range batches[i] {
+					batchTokens += batchItem.tokens
+				}
+				// Account for JSON overhead per request (~200 tokens)
+				jsonOverhead := len(batches[i]) * 200
+				totalBatchTokens := batchTokens + jsonOverhead
+				
+				// Calculate if we can add this node
+				// Use 90% of limit for safety margin
+				safeLimit := maxTotalTokens * 90 / 100
+				if len(batches[i]) < batchSize && totalBatchTokens+nwt.tokens+200 <= safeLimit {
+					batches[i] = append(batches[i], nwt)
+					placed = true
+					break
+				}
+			}
+			if !placed {
+				batches = append(batches, []nodeWithText{nwt})
+			}
+		}
+	}
+	
+	// Optimize batches by trying to merge small batches
+	g.optimizeBatches(&batches, maxTotalTokens)
+	
+	return batches
+}
+
+// optimizeBatches tries to merge small batches to reduce API calls
+func (g *IndexGenerator) optimizeBatches(batches *[][]nodeWithText, maxTotalTokens int) {
+	// Try to merge small batches
+	for i := 0; i < len(*batches); i++ {
+		for j := i + 1; j < len(*batches); j++ {
+			// Check if both batches are small and can be merged
+			if len((*batches)[i]) + len((*batches)[j]) <= 5 { // Only merge very small batches
+				// Calculate total tokens if merged
+				totalTokens := 0
+				for _, nwt := range (*batches)[i] {
+					totalTokens += nwt.tokens
+				}
+				for _, nwt := range (*batches)[j] {
+					totalTokens += nwt.tokens
+				}
+				// Account for JSON overhead
+				totalNodes := len((*batches)[i]) + len((*batches)[j])
+				jsonOverhead := totalNodes * 200
+				totalWithOverhead := totalTokens + jsonOverhead
+				
+				// Check if merged batch would fit within limit
+				if totalWithOverhead <= maxTotalTokens*80/100 { // Use 80% for safety
+					// Merge batch j into batch i
+					(*batches)[i] = append((*batches)[i], (*batches)[j]...)
+					// Remove batch j
+					*batches = append((*batches)[:j], (*batches)[j+1:]...)
+					j-- // Adjust index since we removed an element
+				}
+			}
+		}
+	}
 }

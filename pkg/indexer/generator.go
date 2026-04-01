@@ -93,7 +93,8 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 
 	// Detect document language from first page sample
 	if doc.Language.Code == "" {
-		doc.Language = language.Detect(doc.GetFullText())
+		detector := language.NewDetector()
+		doc.Language = detector.DetectWithSampleSize(doc.GetFullText(), g.cfg.LanguageDetectSampleSize)
 	}
 
 	// Precompute page text map for summary generation (1-based)

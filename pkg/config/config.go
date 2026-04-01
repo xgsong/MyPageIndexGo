@@ -36,6 +36,9 @@ func DefaultConfig() *Config {
 		BatchSize:           10,
 		TOCheckPageNum:      20,
 		MaxTokenNumEachNode: 2000,
+		LanguageDetectSampleSize: 2000,
+		TOCExtractionMaxAttempts: 5,
+		MaxTokensPerGroup: 20000,
 		SkipTOCFix:          false,
 		SkipAppearanceCheck: false,
 	}
@@ -81,6 +84,9 @@ type Config struct {
 
 	// TOC and Content Processing (from config.yaml)
 	MaxTokenNumEachNode int `mapstructure:"max_token_num_each_node"` // Max tokens per node for large node recursion
+	LanguageDetectSampleSize int `mapstructure:"language_detect_sample_size"` // Sample size for language detection (runes)
+	TOCExtractionMaxAttempts int `mapstructure:"toc_extraction_max_attempts"` // Max retry attempts for TOC extraction
+	MaxTokensPerGroup int `mapstructure:"max_tokens_per_group"` // Max tokens per group for page grouping
 
 	// Logging Configuration (from config.yaml)
 	LogLevel string `mapstructure:"log_level"`
@@ -130,6 +136,9 @@ func Load() (*Config, error) {
 	v.SetDefault("batch_size", defaultCfg.BatchSize)
 	v.SetDefault("toc_check_page_num", defaultCfg.TOCheckPageNum)
 	v.SetDefault("max_token_num_each_node", defaultCfg.MaxTokenNumEachNode)
+	v.SetDefault("language_detect_sample_size", defaultCfg.LanguageDetectSampleSize)
+	v.SetDefault("toc_extraction_max_attempts", defaultCfg.TOCExtractionMaxAttempts)
+	v.SetDefault("max_tokens_per_group", defaultCfg.MaxTokensPerGroup)
 	v.SetDefault("skip_toc_fix", defaultCfg.SkipTOCFix)
 	v.SetDefault("skip_appearance_check", defaultCfg.SkipAppearanceCheck)
 

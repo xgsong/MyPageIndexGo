@@ -70,7 +70,7 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 		item := item
 		eg.Go(func() error {
 			itemCopy := item
-			itemCopy.ListIndex = i
+			itemCopy.ListIndex = ptr(i)
 			appears, err := ac.CheckTitleAppearance(ctx, itemCopy, pageTexts, startIndex)
 			if err != nil {
 				return err
@@ -153,7 +153,7 @@ func (mp *MetaProcessor) fixIncorrectTOC(ctx context.Context, items []TOCItem, p
 	// Create set of incorrect indices
 	incorrectSet := make(map[int]bool)
 	for _, item := range incorrectItems {
-		incorrectSet[item.ListIndex] = true
+		incorrectSet[*item.ListIndex] = true
 	}
 
 	// Fix each incorrect item
@@ -183,7 +183,7 @@ func (mp *MetaProcessor) fixSingleItem(ctx context.Context, incorrectItem TOCIte
 
 	// Find previous correct item
 	prevCorrect := startIndex - 1
-	for i := incorrectItem.ListIndex - 1; i >= 0; i-- {
+	for i := *incorrectItem.ListIndex - 1; i >= 0; i-- {
 		if !incorrectSet[i] && i < len(allItems) {
 			if allItems[i].PhysicalIndex != nil {
 				prevCorrect = *allItems[i].PhysicalIndex
@@ -194,7 +194,7 @@ func (mp *MetaProcessor) fixSingleItem(ctx context.Context, incorrectItem TOCIte
 
 	// Find next correct item
 	nextCorrect := endIndex
-	for i := incorrectItem.ListIndex + 1; i < len(allItems); i++ {
+	for i := *incorrectItem.ListIndex + 1; i < len(allItems); i++ {
 		if !incorrectSet[i] {
 			if allItems[i].PhysicalIndex != nil {
 				nextCorrect = *allItems[i].PhysicalIndex

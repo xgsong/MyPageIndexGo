@@ -3,6 +3,7 @@ package indexer
 import (
 	"fmt"
 
+	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 )
 
@@ -12,9 +13,9 @@ type TOCItem struct {
 	Title         string `json:"title"`
 	Page          *int   `json:"page,omitempty"`
 	PhysicalIndex *int   `json:"physical_index,omitempty"`
-	ListIndex     int    `json:"list_index,omitempty"`
+	ListIndex     *int   `json:"list_index,omitempty"`
 	AppearStart   string `json:"appear_start,omitempty"`
-	EndPage       int    `json:"-"` // Temporary field for end page calculation, not serialized
+	EndPage       *int   `json:"-"` // Temporary field for end page calculation, not serialized
 }
 
 // TOCResult holds TOC detection result
@@ -101,9 +102,10 @@ func (t *TOCIndexExtractorResult) GetPhysicalIndexAsString() string {
 // TOCDetector handles TOC detection and extraction
 type TOCDetector struct {
 	llmClient llm.LLMClient
+	cfg       *config.Config
 }
 
 // NewTOCDetector creates a new TOCDetector
-func NewTOCDetector(client llm.LLMClient) *TOCDetector {
-	return &TOCDetector{llmClient: client}
+func NewTOCDetector(client llm.LLMClient, cfg *config.Config) *TOCDetector {
+	return &TOCDetector{llmClient: client, cfg: cfg}
 }

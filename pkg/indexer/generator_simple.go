@@ -9,6 +9,11 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/document"
 )
 
+// ptr returns a pointer to the given value
+func ptr[T any](v T) *T {
+	return &v
+}
+
 func normalizeArabicToChinese(s string) string {
 	arabicToChinese := map[rune]rune{
 		'1': '一',
@@ -184,7 +189,7 @@ func scanAndAddMissingSubsections(tocItems []TOCItem, pageTexts []string, startI
 					Title:         title,
 					PhysicalIndex: &actualPage,
 					Page:          &actualPage,
-					ListIndex:     len(tocItems) + len(addedItems),
+					ListIndex:     ptr(len(tocItems) + len(addedItems)),
 				})
 				existingItems[structure] = &addedItems[len(addedItems)-1]
 			}
@@ -237,7 +242,18 @@ func sortTOCItemsByPage(items []TOCItem) []TOCItem {
 		if *items[i].PhysicalIndex != *items[j].PhysicalIndex {
 			return *items[i].PhysicalIndex < *items[j].PhysicalIndex
 		}
-		return items[i].ListIndex < items[j].ListIndex
+		// If same physical index, sort by ListIndex (handle nil case)
+		if items[i].ListIndex != nil && items[j].ListIndex != nil {
+			return *items[i].ListIndex < *items[j].ListIndex
+		}
+		if items[i].ListIndex != nil {
+			return true
+		}
+		if items[j].ListIndex != nil {
+			return false
+		}
+		// If both ListIndex are nil, keep original order
+		return false
 	})
 	return items
 }
@@ -259,10 +275,10 @@ func calculatePageRanges(items []TOCItem, totalPages int) []TOCItem {
 		}
 
 		if nextDifferentPage > startPage {
-			items[i].EndPage = nextDifferentPage
+			items[i].EndPage = ptr(nextDifferentPage)
 
 		} else {
-			items[i].EndPage = totalPages
+			items[i].EndPage = ptr(totalPages)
 
 		}
 
@@ -275,7 +291,7 @@ func calculatePageRanges(items []TOCItem, totalPages int) []TOCItem {
 			}
 		}
 		if samePageNext {
-			items[i].EndPage = startPage
+			items[i].EndPage = ptr(startPage)
 
 		}
 	}
@@ -326,9 +342,9 @@ func buildTreeStructure(items []TOCItem, pageTextMap map[int]string, totalPages 
 				}
 				existingNode.StartPage = startPage
 
-				existingNode.EndPage = item.EndPage
+				existingNode.EndPage = *item.EndPage
 
-				preview := extractContentPreview(pageTextMap, startPage, item.EndPage, 100)
+				preview := extractContentPreview(pageTextMap, startPage, *item.EndPage, 100)
 
 				existingNode.Title = enrichTitleWithPreview(item.Title, preview)
 
@@ -345,11 +361,11 @@ func buildTreeStructure(items []TOCItem, pageTextMap map[int]string, totalPages 
 
 		}
 
-		preview := extractContentPreview(pageTextMap, startPage, item.EndPage, 100)
+		preview := extractContentPreview(pageTextMap, startPage, *item.EndPage, 100)
 
 		enrichedTitle := enrichTitleWithPreview(item.Title, preview)
 
-		node := document.NewNode(enrichedTitle, startPage, item.EndPage)
+		node := document.NewNode(enrichedTitle, startPage, *item.EndPage)
 
 		nodes[item.Structure] = node
 
@@ -449,7 +465,7 @@ func createFlatStructure(items []TOCItem, totalPages int) *document.Node {
 
 		}
 
-		node := document.NewNode(item.Title, startPage, item.EndPage)
+		node := document.NewNode(item.Title, startPage, *item.EndPage)
 
 		root.AddChild(node)
 

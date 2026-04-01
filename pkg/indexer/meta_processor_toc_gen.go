@@ -149,7 +149,7 @@ Document content:
 		items[i] = TOCItem{
 			Structure:   normalizeStructure(entry.Structure),
 			Title:       cleanTitleForOutput(entry.Title),
-			ListIndex:   i,
+			ListIndex:     ptr(i),
 			AppearStart: "yes",
 		}
 		// Convert interface{} to string first
@@ -262,7 +262,7 @@ Return ONLY new sections. If all sections are already in Existing TOC, return an
 		items[i] = TOCItem{
 			Structure: normalizeStructure(entry.Structure),
 			Title:     cleanTitleForOutput(entry.Title),
-			ListIndex: len(existingTOC) + i,
+			ListIndex:     ptr(len(existingTOC) + i),
 		}
 		// Convert interface{} to string first
 		physicalIndexStr := result.GetPhysicalIndexAsString(i)

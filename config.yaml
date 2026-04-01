@@ -47,7 +47,7 @@ max_pages_per_node: 10
 max_tokens_per_node: 24000
 
 # Generate summaries for each index node
-generate_summaries: false
+generate_summaries: true
 
 # Enable batch LLM calls for summary generation
 enable_batch_calls: true
@@ -62,6 +62,15 @@ toc_check_page_num: 20
 # Lowered from 20000 to 5000 to trigger splitting more frequently
 max_token_num_each_node: 16000
 
+# Sample size for language detection (in runes)
+language_detect_sample_size: 2000
+
+# Maximum retry attempts for TOC extraction
+toc_extraction_max_attempts: 5
+
+# Maximum tokens per group for page grouping
+max_tokens_per_group: 20000
+
 # -----------------------------------------------------------------------------
 # Performance Optimization
 # -----------------------------------------------------------------------------
@@ -75,10 +84,10 @@ skip_appearance_check: true
 # Cache Configuration
 # -----------------------------------------------------------------------------
 # Enable LLM response caching to reduce API calls
-enable_llm_cache: false
+enable_llm_cache: true
 
 # LLM cache TTL in seconds (0 means no expiration)
-llm_cache_ttl: 3600
+llm_cache_ttl: 86400  # 24 hours for static documents
 
 # Enable caching for search results
 enable_search_cache: false

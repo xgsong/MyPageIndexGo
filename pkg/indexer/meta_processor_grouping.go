@@ -30,7 +30,7 @@ func (mp *MetaProcessor) pageListToGroupText(pageTexts []string, startIndex int)
 
 	maxTokens := mp.cfg.MaxTokensPerNode
 	if maxTokens <= 0 {
-		maxTokens = 20000
+		maxTokens = mp.cfg.MaxTokensPerGroup
 	}
 
 	// If all content fits in one group, return as single group

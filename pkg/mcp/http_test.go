@@ -88,77 +88,66 @@ func TestHTTPServerGetEndpoints(t *testing.T) {
 	assert.Equal(t, "http://localhost:8080/ready", endpoints["ready"])
 }
 
+func testAuthenticationScenario(t *testing.T, cfg Config, setValidAuth func(*http.Request), setInvalidAuth func(*http.Request)) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	authHandler := withAuthentication(cfg, handler)
+
+	t.Run("valid credentials", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		setValidAuth(req)
+		rr := httptest.NewRecorder()
+
+		authHandler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+	})
+
+	t.Run("invalid credentials", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		setInvalidAuth(req)
+		rr := httptest.NewRecorder()
+
+		authHandler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+
+	t.Run("no credentials", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		rr := httptest.NewRecorder()
+
+		authHandler.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
+}
+
 func TestWithAuthentication(t *testing.T) {
 	t.Run("Bearer token authentication", func(t *testing.T) {
 		cfg := Config{
 			AuthToken: "secret-token",
 		}
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
-		authHandler := withAuthentication(cfg, handler)
-
-		t.Run("valid Bearer token", func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-			req.Header.Set("Authorization", "Bearer secret-token")
-			rr := httptest.NewRecorder()
-
-			authHandler.ServeHTTP(rr, req)
-			assert.Equal(t, http.StatusOK, rr.Code)
-		})
-
-		t.Run("invalid Bearer token", func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-			req.Header.Set("Authorization", "Bearer wrong-token")
-			rr := httptest.NewRecorder()
-
-			authHandler.ServeHTTP(rr, req)
-			assert.Equal(t, http.StatusUnauthorized, rr.Code)
-		})
-
-		t.Run("no Bearer token", func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-			rr := httptest.NewRecorder()
-
-			authHandler.ServeHTTP(rr, req)
-			assert.Equal(t, http.StatusUnauthorized, rr.Code)
-		})
+		testAuthenticationScenario(t, cfg,
+			func(req *http.Request) {
+				req.Header.Set("Authorization", "Bearer secret-token")
+			},
+			func(req *http.Request) {
+				req.Header.Set("Authorization", "Bearer wrong-token")
+			},
+		)
 	})
 
 	t.Run("API Key authentication", func(t *testing.T) {
 		cfg := Config{
 			APIKey: "secret-api-key",
 		}
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
-		authHandler := withAuthentication(cfg, handler)
-
-		t.Run("valid API key", func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-			req.Header.Set("X-API-Key", "secret-api-key")
-			rr := httptest.NewRecorder()
-
-			authHandler.ServeHTTP(rr, req)
-			assert.Equal(t, http.StatusOK, rr.Code)
-		})
-
-		t.Run("invalid API key", func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-			req.Header.Set("X-API-Key", "wrong-key")
-			rr := httptest.NewRecorder()
-
-			authHandler.ServeHTTP(rr, req)
-			assert.Equal(t, http.StatusUnauthorized, rr.Code)
-		})
-
-		t.Run("no API key", func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-			rr := httptest.NewRecorder()
-
-			authHandler.ServeHTTP(rr, req)
-			assert.Equal(t, http.StatusUnauthorized, rr.Code)
-		})
+		testAuthenticationScenario(t, cfg,
+			func(req *http.Request) {
+				req.Header.Set("X-API-Key", "secret-api-key")
+			},
+			func(req *http.Request) {
+				req.Header.Set("X-API-Key", "wrong-key")
+			},
+		)
 	})
 
 	t.Run("skip auth for health endpoints", func(t *testing.T) {

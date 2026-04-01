@@ -35,7 +35,7 @@ func NewMetaProcessor(client llm.LLMClient, cfg *config.Config, docLanguage lang
 	return &MetaProcessor{
 		llmClient:   client,
 		cfg:         cfg,
-		tocDetector: NewTOCDetector(client),
+		tocDetector: NewTOCDetector(client, cfg),
 		docLanguage: docLanguage,
 	}
 }

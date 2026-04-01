@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/tokenizer"
 )
 
@@ -347,9 +348,11 @@ func TestCalculateOptimalBatchSize(t *testing.T) {
 
 func TestTOCDetector_NewTOCDetector(t *testing.T) {
 	mockLLM := &MockLLMClient{}
-	detector := NewTOCDetector(mockLLM)
+	cfg := config.DefaultConfig()
+	detector := NewTOCDetector(mockLLM, cfg)
 	assert.NotNil(t, detector)
 	assert.Equal(t, mockLLM, detector.llmClient)
+	assert.Equal(t, cfg, detector.cfg)
 }
 
 func TestNewPageGrouperWithOverlap(t *testing.T) {

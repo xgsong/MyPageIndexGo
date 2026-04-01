@@ -42,17 +42,23 @@ func NewDetector() *Detector {
 // Detect detects the language from text using Unicode character analysis.
 // It analyzes the first 2000 characters for efficiency.
 func (d *Detector) Detect(text string) Language {
+	return d.DetectWithSampleSize(text, 2000)
+}
+
+// DetectWithSampleSize detects the language from text using Unicode character analysis.
+// It analyzes the first sampleSize characters for efficiency.
+func (d *Detector) DetectWithSampleSize(text string, sampleSize int) Language {
 	if len(text) == 0 {
 		return LanguageUnknown
 	}
 
-	// Take sample of first 2000 runes for efficiency
+	// Take sample of first sampleSize runes for efficiency
 	sample := text
-	if utf8.RuneCountInString(sample) > 2000 {
-		// Truncate to 2000 runes
+	if utf8.RuneCountInString(sample) > sampleSize {
+		// Truncate to sampleSize runes
 		runes := []rune(sample)
-		if len(runes) > 2000 {
-			sample = string(runes[:2000])
+		if len(runes) > sampleSize {
+			sample = string(runes[:sampleSize])
 		}
 	}
 

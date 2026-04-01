@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"sync"
 	"time"
 
 	"github.com/xgsong/mypageindexgo/pkg/document"
@@ -26,11 +27,42 @@ func NewCachedLLMClient(client LLMClient, ttl time.Duration, enableSearchCache b
 	}
 }
 
+var (
+	hashCache     = make(map[string]string)
+	hashCacheLock sync.RWMutex
+)
+
 func hashText(prefix, text string) string {
+	// For short texts, compute directly
+	if len(text) < 1024 {
+		h := sha256.New()
+		h.Write([]byte(prefix))
+		h.Write([]byte(text))
+		return hex.EncodeToString(h.Sum(nil))
+	}
+	
+	// For long texts, use cache
+	cacheKey := prefix + ":" + text
+	hashCacheLock.RLock()
+	if hash, ok := hashCache[cacheKey]; ok {
+		hashCacheLock.RUnlock()
+		return hash
+	}
+	hashCacheLock.RUnlock()
+	
 	h := sha256.New()
 	h.Write([]byte(prefix))
 	h.Write([]byte(text))
-	return hex.EncodeToString(h.Sum(nil))
+	hash := hex.EncodeToString(h.Sum(nil))
+	
+	hashCacheLock.Lock()
+	// Limit cache size to prevent memory leak
+	if len(hashCache) < 1000 {
+		hashCache[cacheKey] = hash
+	}
+	hashCacheLock.Unlock()
+	
+	return hash
 }
 
 func (c *CachedLLMClient) GenerateStructure(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
@@ -86,33 +118,56 @@ func (c *CachedLLMClient) Search(ctx context.Context, query string, tree *docume
 }
 
 func (c *CachedLLMClient) GenerateBatchSummaries(ctx context.Context, requests []*BatchSummaryRequest, lang language.Language) ([]*BatchSummaryResponse, error) {
-	var cachedResponses []*BatchSummaryResponse
-	var uncachedRequests []*BatchSummaryRequest
-	var requestIndices []int
-
+	// Pre-compute all cache keys to avoid duplicate hash calculations
+	type requestWithKey struct {
+		req *BatchSummaryRequest
+		key string
+		idx int
+	}
+	
+	requestsWithKeys := make([]requestWithKey, len(requests))
 	for i, req := range requests {
-		key := hashText("GenerateSummary", req.NodeTitle+"||"+req.Text+"||"+lang.Code)
-		if value, ok := c.cache.Get(key); ok {
+		requestsWithKeys[i] = requestWithKey{
+			req: req,
+			key: hashText("GenerateSummary", req.NodeTitle+"||"+req.Text+"||"+lang.Code),
+			idx: i,
+		}
+	}
+	
+	// Separate cached and uncached requests
+	var cachedResponses []*BatchSummaryResponse
+	var uncachedRequests []requestWithKey
+	
+	for _, rwk := range requestsWithKeys {
+		if value, ok := c.cache.Get(rwk.key); ok {
 			cachedResponses = append(cachedResponses, &BatchSummaryResponse{
-				NodeID:  req.NodeID,
+				NodeID:  rwk.req.NodeID,
 				Summary: value.(string),
 			})
 			continue
 		}
-		uncachedRequests = append(uncachedRequests, req)
-		requestIndices = append(requestIndices, i)
+		uncachedRequests = append(uncachedRequests, rwk)
 	}
-
+	
 	if len(uncachedRequests) == 0 {
 		return cachedResponses, nil
 	}
-
-	uncachedResponses, err := c.llmClient.GenerateBatchSummaries(ctx, uncachedRequests, lang)
+	
+	// Extract just the requests for the LLM call
+	llmRequests := make([]*BatchSummaryRequest, len(uncachedRequests))
+	for i, rwk := range uncachedRequests {
+		llmRequests[i] = rwk.req
+	}
+	
+	uncachedResponses, err := c.llmClient.GenerateBatchSummaries(ctx, llmRequests, lang)
 	if err != nil {
 		return nil, err
 	}
-
+	
+	// Build final responses array
 	responses := make([]*BatchSummaryResponse, len(requests))
+	
+	// First, fill in cached responses
 	for _, resp := range cachedResponses {
 		for i, req := range requests {
 			if req.NodeID == resp.NodeID {
@@ -121,16 +176,16 @@ func (c *CachedLLMClient) GenerateBatchSummaries(ctx context.Context, requests [
 			}
 		}
 	}
+	
+	// Then, fill in uncached responses and update cache
 	for i, resp := range uncachedResponses {
-		originalIdx := requestIndices[i]
-		responses[originalIdx] = resp
+		rwk := uncachedRequests[i]
+		responses[rwk.idx] = resp
 		if resp.Error == "" {
-			req := uncachedRequests[i]
-			key := hashText("GenerateSummary", req.NodeTitle+"||"+req.Text+"||"+lang.Code)
-			c.cache.Set(key, resp.Summary)
+			c.cache.Set(rwk.key, resp.Summary)
 		}
 	}
-
+	
 	return responses, nil
 }
 

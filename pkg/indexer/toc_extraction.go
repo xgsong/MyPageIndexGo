@@ -80,8 +80,8 @@ func (d *TOCDetector) extractTOCFromLLM(ctx context.Context, tocContent string) 
 	// Handle truncated JSON — find last complete object
 	jsonContent := getJSONContent(response)
 
-	// Continue generation if incomplete (max 5 retries)
-	const maxAttempts = 5
+	// Continue generation if incomplete (configurable retries)
+	maxAttempts := d.cfg.TOCExtractionMaxAttempts
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Truncate at last complete JSON object
 		lastBrace := strings.LastIndex(jsonContent, "}")
