@@ -135,10 +135,10 @@ func (g *PageGrouper) GroupPages(doc *document.Document) ([]*PageGroup, error) {
 	var currentGroup *PageGroup
 	var currentText strings.Builder
 	var currentTokens int
-	
+
 	// Pre-allocate buffer for text building (estimate: 500 chars per page)
 	currentText.Grow(estimatedGroups * 500)
-	
+
 	// Use pre-allocated overlap buffer with circular indexing
 	overlapBuffer := make([]pageWithTokens, g.overlapPages)
 	overlapIndex := 0

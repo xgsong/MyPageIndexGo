@@ -106,5 +106,3 @@ func normalizeStructure(structure string) string {
 
 	return strings.Join(normalized, ".")
 }
-
-

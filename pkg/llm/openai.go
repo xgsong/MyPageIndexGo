@@ -78,7 +78,7 @@ func (c *OpenAIClient) createChatCompletion(ctx context.Context, req openai.Chat
 		// Prepend system message to force disable thinking/reasoning output
 		// This works for all LLMs regardless of API parameter support
 		systemContent := "IMPORTANT: Do NOT output any thinking/reasoning process, <think> tags, or chain-of-thought content. Directly output only the final result in the required format. Any thought content must be completely excluded from your response."
-		
+
 		if len(req.Messages) == 0 {
 			// No messages, add system message as first
 			req.Messages = []openai.ChatCompletionMessage{

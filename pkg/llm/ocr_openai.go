@@ -75,7 +75,7 @@ func (c *OpenAIOCRClient) Recognize(ctx context.Context, req *document.OCRReques
 				Content: c.systemPrompt,
 			},
 			{
-				Role:    openai.ChatMessageRoleUser,
+				Role: openai.ChatMessageRoleUser,
 				MultiContent: []openai.ChatMessagePart{
 					{
 						Type: openai.ChatMessagePartTypeText,

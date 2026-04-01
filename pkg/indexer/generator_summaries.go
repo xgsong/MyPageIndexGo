@@ -70,7 +70,7 @@ func (g *IndexGenerator) generateAllSummaries(ctx context.Context, root *documen
 			// Use pooled builder to reduce allocations
 			nodeText := pool.GetBuilder()
 			defer pool.PutBuilder(nodeText)
-			
+
 			if totalLen > 0 {
 				nodeText.Grow(totalLen)
 			}
@@ -142,7 +142,7 @@ func (g *IndexGenerator) generateAllSummariesBatch(ctx context.Context, nodes []
 		}
 		text := nodeText.String()
 		pool.PutBuilder(nodeText) // Return to pool after use
-		
+
 		tokens := g.tokenizer.Count(text)
 		nodesWithText = append(nodesWithText, nodeWithText{
 			node:   node,

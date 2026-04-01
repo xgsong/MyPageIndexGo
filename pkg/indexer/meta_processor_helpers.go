@@ -190,7 +190,7 @@ func cleanTitleForOutput(title string) string {
 	// Convert to rune array for safe UTF-8 handling
 	runes := []rune(title)
 	valid := make([]rune, 0, len(runes))
-	
+
 	// Remove invalid UTF-8 characters and replacement characters
 	for _, r := range runes {
 		if r == 0xFFFD || !unicode.IsPrint(r) { // Skip replacement char and non-printable chars
@@ -225,7 +225,7 @@ func cleanTitleForOutput(title string) string {
 			}
 		}
 		valid = valid[:truncateAt]
-		
+
 		// Trim trailing punctuation and spaces
 		for len(valid) > 0 && (unicode.IsPunct(valid[len(valid)-1]) || unicode.IsSpace(valid[len(valid)-1])) {
 			valid = valid[:len(valid)-1]

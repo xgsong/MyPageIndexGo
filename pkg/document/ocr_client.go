@@ -19,12 +19,12 @@ type OCRRequest struct {
 
 // OCRResponse represents the response from an OCR operation.
 type OCRResponse struct {
-	Text          string                 `json:"text"`          // Full plain text content
-	Structured    map[string]interface{} `json:"structured"`    // Raw structured data from OCR provider
-	Blocks        []OCRBlock             `json:"blocks"`        // List of recognized content blocks
-	Confidence    float64                `json:"confidence"`    // Overall recognition confidence
-	PageNum       int                    `json:"pageNum"`       // Corresponding page number
-	Error         string                 `json:"error"`         // Error message if OCR failed
+	Text       string                 `json:"text"`       // Full plain text content
+	Structured map[string]interface{} `json:"structured"` // Raw structured data from OCR provider
+	Blocks     []OCRBlock             `json:"blocks"`     // List of recognized content blocks
+	Confidence float64                `json:"confidence"` // Overall recognition confidence
+	PageNum    int                    `json:"pageNum"`    // Corresponding page number
+	Error      string                 `json:"error"`      // Error message if OCR failed
 }
 
 // OCRClient is the interface for OCR providers.

@@ -11,9 +11,9 @@ import (
 
 // PDFRenderer handles rendering PDF pages to images.
 type PDFRenderer struct {
-	dpi       float64               // Render DPI
-	scale     float64               // Scale factor (calculated from DPI)
-	quality   png.CompressionLevel  // PNG compression quality
+	dpi     float64              // Render DPI
+	scale   float64              // Scale factor (calculated from DPI)
+	quality png.CompressionLevel // PNG compression quality
 }
 
 // NewPDFRenderer creates a new PDFRenderer with the specified DPI.
@@ -63,12 +63,12 @@ func (r *PDFRenderer) RenderAllPages(ctx context.Context, doc *fitz.Document, co
 	if concurrency <= 0 {
 		concurrency = runtime.NumCPU()
 	}
-	
+
 	// Limit concurrency to avoid excessive memory usage
 	if concurrency > numPages {
 		concurrency = numPages
 	}
-	
+
 	// For small documents, use sequential rendering to avoid overhead
 	if numPages <= 4 || concurrency <= 1 {
 		for i := 0; i < numPages; i++ {
@@ -91,10 +91,10 @@ func (r *PDFRenderer) RenderAllPages(ctx context.Context, doc *fitz.Document, co
 	// For larger documents, use page batching with limited concurrency
 	// Note: fitz.Document is not concurrency-safe, so we process in batches
 	batchSize := max(1, numPages/concurrency)
-	
+
 	for batchStart := 0; batchStart < numPages; batchStart += batchSize {
 		batchEnd := min(batchStart+batchSize, numPages)
-		
+
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

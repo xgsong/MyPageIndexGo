@@ -14,27 +14,27 @@ import (
 // This function exists solely to support existing tests and should not be used in production code.
 func DefaultConfig() *Config {
 	return &Config{
-		OpenAIAPIKey:      "", // Empty by default for tests
-		OCRAPIKey:         "", // Empty by default for tests
-		OpenAIBaseURL:     "https://api.openai.com/v1",
-		OpenAIModel:       "gpt-4o",
-		OCRModel:          "GLM-OCR-Q8_0",
-		OCREnabled:        false,
-		OpenAIOCRBaseURL:  "http://localhost:8080",
-		OCRRenderDPI:      150,
-		OCRConcurrency:    5,
-		OCRTimeout:        60,
-		MaxConcurrency:    20,
-		MaxPagesPerNode:   5,
-		MaxTokensPerNode:  16000,
-		GenerateSummaries: false, // Disable summary generation temporarily for debugging structure extraction
-		LogLevel:          "info",
-		EnableLLMCache:    true,
-		LLMCacheTTL:       3600,
-		EnableSearchCache: false,
-		EnableBatchCalls:  false,
-		BatchSize:         10,
-		TOCheckPageNum:    20,
+		OpenAIAPIKey:        "", // Empty by default for tests
+		OCRAPIKey:           "", // Empty by default for tests
+		OpenAIBaseURL:       "https://api.openai.com/v1",
+		OpenAIModel:         "gpt-4o",
+		OCRModel:            "GLM-OCR-Q8_0",
+		OCREnabled:          false,
+		OpenAIOCRBaseURL:    "http://localhost:8080",
+		OCRRenderDPI:        150,
+		OCRConcurrency:      5,
+		OCRTimeout:          60,
+		MaxConcurrency:      20,
+		MaxPagesPerNode:     5,
+		MaxTokensPerNode:    16000,
+		GenerateSummaries:   false, // Disable summary generation temporarily for debugging structure extraction
+		LogLevel:            "info",
+		EnableLLMCache:      true,
+		LLMCacheTTL:         3600,
+		EnableSearchCache:   false,
+		EnableBatchCalls:    false,
+		BatchSize:           10,
+		TOCheckPageNum:      20,
 		MaxTokenNumEachNode: 2000,
 		SkipTOCFix:          false,
 		SkipAppearanceCheck: false,
@@ -50,34 +50,34 @@ type Config struct {
 	OCRAPIKey    string `mapstructure:"ocr_api_key"`    // Optional, for cloud OCR providers
 
 	// LLM Configuration (from config.yaml)
-	OpenAIBaseURL     string `mapstructure:"openai_base_url"`
-	OpenAIModel       string `mapstructure:"openai_model"`
+	OpenAIBaseURL string `mapstructure:"openai_base_url"`
+	OpenAIModel   string `mapstructure:"openai_model"`
 
 	// OCR Configuration (from config.yaml)
-	OCRModel          string `mapstructure:"ocr_model"`          // Model name for OCR (e.g., GLM-OCR-Q8_0)
-	OCREnabled        bool   `mapstructure:"ocr_enabled"`        // Enable OCR for scanned PDFs
-	OpenAIOCRBaseURL   string `mapstructure:"openai_ocr_base_url"` // OpenAI-compatible OCR API base URL
-	OCRRenderDPI      int    `mapstructure:"ocr_render_dpi"`     // DPI for PDF rendering to images
-	OCRConcurrency    int    `mapstructure:"ocr_concurrency"`    // Maximum concurrent OCR requests
-	OCRTimeout        int    `mapstructure:"ocr_timeout"`        // OCR request timeout in seconds
+	OCRModel         string `mapstructure:"ocr_model"`           // Model name for OCR (e.g., GLM-OCR-Q8_0)
+	OCREnabled       bool   `mapstructure:"ocr_enabled"`         // Enable OCR for scanned PDFs
+	OpenAIOCRBaseURL string `mapstructure:"openai_ocr_base_url"` // OpenAI-compatible OCR API base URL
+	OCRRenderDPI     int    `mapstructure:"ocr_render_dpi"`      // DPI for PDF rendering to images
+	OCRConcurrency   int    `mapstructure:"ocr_concurrency"`     // Maximum concurrent OCR requests
+	OCRTimeout       int    `mapstructure:"ocr_timeout"`         // OCR request timeout in seconds
 
 	// Indexer Configuration (from config.yaml)
-	MaxConcurrency    int    `mapstructure:"max_concurrency"`
-	MaxPagesPerNode   int    `mapstructure:"max_pages_per_node"`
-	MaxTokensPerNode  int    `mapstructure:"max_tokens_per_node"`
-	GenerateSummaries bool   `mapstructure:"generate_summaries"`
-	EnableBatchCalls  bool   `mapstructure:"enable_batch_calls"` // Enable batch LLM calls for summary generation
-	BatchSize         int    `mapstructure:"batch_size"`         // Number of summaries per batch call
-	TOCheckPageNum    int    `mapstructure:"toc_check_page_num"` // Max pages to scan for TOC detection
+	MaxConcurrency    int  `mapstructure:"max_concurrency"`
+	MaxPagesPerNode   int  `mapstructure:"max_pages_per_node"`
+	MaxTokensPerNode  int  `mapstructure:"max_tokens_per_node"`
+	GenerateSummaries bool `mapstructure:"generate_summaries"`
+	EnableBatchCalls  bool `mapstructure:"enable_batch_calls"` // Enable batch LLM calls for summary generation
+	BatchSize         int  `mapstructure:"batch_size"`         // Number of summaries per batch call
+	TOCheckPageNum    int  `mapstructure:"toc_check_page_num"` // Max pages to scan for TOC detection
 
 	// Cache Configuration (from config.yaml)
-	EnableLLMCache    bool   `mapstructure:"enable_llm_cache"`
-	LLMCacheTTL       int    `mapstructure:"llm_cache_ttl"`      // TTL in seconds, 0 means no expiration
-	EnableSearchCache bool   `mapstructure:"enable_search_cache"`// Enable caching for search results
+	EnableLLMCache    bool `mapstructure:"enable_llm_cache"`
+	LLMCacheTTL       int  `mapstructure:"llm_cache_ttl"`       // TTL in seconds, 0 means no expiration
+	EnableSearchCache bool `mapstructure:"enable_search_cache"` // Enable caching for search results
 
 	// Performance Optimization (from config.yaml)
-	SkipTOCFix           bool `mapstructure:"skip_toc_fix"`           // Skip TOC fix retry to improve performance
-	SkipAppearanceCheck  bool `mapstructure:"skip_appearance_check"`  // Skip appearance check to improve performance
+	SkipTOCFix          bool `mapstructure:"skip_toc_fix"`          // Skip TOC fix retry to improve performance
+	SkipAppearanceCheck bool `mapstructure:"skip_appearance_check"` // Skip appearance check to improve performance
 
 	// TOC and Content Processing (from config.yaml)
 	MaxTokenNumEachNode int `mapstructure:"max_token_num_each_node"` // Max tokens per node for large node recursion

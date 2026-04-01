@@ -67,10 +67,10 @@ func (t *Tracker) Current() int64 {
 }
 
 type Stage struct {
-	Name        string
-	Start       int64
-	End         int64
-	Tracker     *Tracker
+	Name    string
+	Start   int64
+	End     int64
+	Tracker *Tracker
 }
 
 type MultiStageTracker struct {
@@ -116,8 +116,8 @@ func (mst *MultiStageTracker) callback(done int64, total int64, desc string) {
 	stageRange := stage.End - stage.Start
 	currentVal := stage.Start + int64(stageProgress*float64(stageRange))
 
-	mst.bar.Set64(currentVal)        // nolint:errcheck // Progress bar error non-critical
-	mst.bar.Describe(desc) // nolint:errcheck // Progress bar error non-critical
+	mst.bar.Set64(currentVal) // nolint:errcheck // Progress bar error non-critical
+	mst.bar.Describe(desc)    // nolint:errcheck // Progress bar error non-critical
 }
 
 func (mst *MultiStageTracker) NextStage() {

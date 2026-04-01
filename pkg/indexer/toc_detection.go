@@ -12,15 +12,15 @@ import (
 // Pre-compiled regular expressions for performance
 var (
 	// transformDotsToColon patterns
-	fiveDotsRegex      = regexp.MustCompile(`\.{5,}`)
-	dotSpaceRegex      = regexp.MustCompile(`(?:\. ){5,}\.?`)
-	
+	fiveDotsRegex = regexp.MustCompile(`\.{5,}`)
+	dotSpaceRegex = regexp.MustCompile(`(?:\. ){5,}\.?`)
+
 	// parseLLMJSONResponse patterns
 	trailingCommaRegex = regexp.MustCompile(`,\s*([}\]])`)
 	unquotedKeyRegex   = regexp.MustCompile(`([{\s,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:`)
 	jsonExtractRegex   = regexp.MustCompile(`(?s)\{.*\}`)
 	arrayExtractRegex  = regexp.MustCompile(`(?s)\[.*\]`)
-	
+
 	// convertPhysicalIndexToInt patterns
 	chinesePageRegex = regexp.MustCompile(`第(\d+)页`)
 )
@@ -202,7 +202,7 @@ func convertPhysicalIndexToInt(physicalIndex string) (int, error) {
 		cleaned = strings.ReplaceAll(cleaned, "】", "")
 		cleaned = strings.ReplaceAll(cleaned, "开始", "")
 		cleaned = strings.ReplaceAll(cleaned, "结束", "")
-		
+
 		matches := chinesePageRegex.FindStringSubmatch(cleaned)
 		if len(matches) >= 2 {
 			return strconv.Atoi(matches[1])
