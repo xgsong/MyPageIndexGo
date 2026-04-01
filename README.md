@@ -230,9 +230,24 @@ Generate index from PDF or Markdown document.
 }
 ```
 
-#### search_index (Coming Soon)
+#### search_index
 
 Search in generated index using LLM-based reasoning.
+
+**Parameters:**
+- `index_path` (required): Path to generated index JSON file
+- `query` (required): Search query string
+- `output_path` (optional): Output file path to save search result as JSON
+- `model` (optional): LLM model to use, defaults to config.yaml setting
+
+**Example:**
+```json
+{
+  "index_path": "/path/to/index.json",
+  "query": "What is the total revenue in 2023?",
+  "model": "gpt-4o"
+}
+```
 
 #### update_index (Coming Soon)
 

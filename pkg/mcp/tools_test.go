@@ -97,12 +97,12 @@ func TestGenerateIndexRequest_BindArguments(t *testing.T) {
 	assert.Equal(t, true, *boundReq.GenerateSummaries)
 }
 
-func TestSearchIndexHandler_NotImplemented(t *testing.T) {
+func TestSearchIndexHandler_MissingIndexPath(t *testing.T) {
 	req := mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
 			Name: "search_index",
 			Arguments: map[string]any{
-				"index_path": "/tmp/test.index.json",
+				"index_path": "",
 				"query":      "test query",
 			},
 		},
@@ -112,7 +112,43 @@ func TestSearchIndexHandler_NotImplemented(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.True(t, result.IsError)
-	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "尚未实现")
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "index_path 是必需参数")
+}
+
+func TestSearchIndexHandler_MissingQuery(t *testing.T) {
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "search_index",
+			Arguments: map[string]any{
+				"index_path": "/tmp/test.index.json",
+				"query":      "",
+			},
+		},
+	}
+
+	result, err := searchIndexHandler(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "query 是必需参数")
+}
+
+func TestSearchIndexHandler_IndexFileNotFound(t *testing.T) {
+	req := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "search_index",
+			Arguments: map[string]any{
+				"index_path": "/nonexistent/index.json",
+				"query":      "test query",
+			},
+		},
+	}
+
+	result, err := searchIndexHandler(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "索引加载失败")
 }
 
 func TestUpdateIndexHandler_NotImplemented(t *testing.T) {
@@ -543,4 +579,61 @@ func TestUpdateIndexRequest_BindArguments(t *testing.T) {
 	assert.Equal(t, "/tmp/new.pdf", boundReq.NewFilePath)
 	assert.Equal(t, "gpt-4o-mini", *boundReq.Model)
 	assert.Equal(t, 5, *boundReq.MaxConcurrency)
+}
+
+func TestSearchIndexHandler_ErrorMessagesAreChinese(t *testing.T) {
+	testCases := []struct {
+		name     string
+		req      mcp.CallToolRequest
+		expected string
+	}{
+		{
+			name: "missing index path",
+			req: mcp.CallToolRequest{
+				Params: mcp.CallToolParams{
+					Name: "search_index",
+					Arguments: map[string]any{
+						"index_path": "",
+						"query":      "test",
+					},
+				},
+			},
+			expected: "index_path 是必需参数",
+		},
+		{
+			name: "missing query",
+			req: mcp.CallToolRequest{
+				Params: mcp.CallToolParams{
+					Name: "search_index",
+					Arguments: map[string]any{
+						"index_path": "/tmp/test.index.json",
+						"query":      "",
+					},
+				},
+			},
+			expected: "query 是必需参数",
+		},
+		{
+			name: "index file not found",
+			req: mcp.CallToolRequest{
+				Params: mcp.CallToolParams{
+					Name: "search_index",
+					Arguments: map[string]any{
+						"index_path": "/nonexistent_xyz123.index.json",
+						"query":      "test",
+					},
+				},
+			},
+			expected: "索引加载失败",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := searchIndexHandler(context.Background(), tc.req)
+			assert.NoError(t, err)
+			assert.True(t, result.IsError)
+			assert.Contains(t, result.Content[0].(mcp.TextContent).Text, tc.expected)
+		})
+	}
 }

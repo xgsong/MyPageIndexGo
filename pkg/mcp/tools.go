@@ -110,7 +110,73 @@ func generateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 }
 
 func searchIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultError("search_index 工具尚未实现"), nil
+	startTime := time.Now()
+
+	var req SearchIndexRequest
+	if err := request.BindArguments(&req); err != nil {
+		return mcp.NewToolResultErrorf("参数解析失败：%v", err), nil
+	}
+
+	if req.IndexPath == "" {
+		return mcp.NewToolResultError("index_path 是必需参数"), nil
+	}
+
+	if req.Query == "" {
+		return mcp.NewToolResultError("query 是必需参数"), nil
+	}
+
+	tree, err := output.LoadIndexTree(req.IndexPath)
+	if err != nil {
+		return mcp.NewToolResultErrorf("索引加载失败：%v", err), nil
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return mcp.NewToolResultErrorf("配置加载失败：%v", err), nil
+	}
+
+	if req.Model != nil && *req.Model != "" {
+		cfg.OpenAIModel = *req.Model
+	}
+
+	var llmClient llm.LLMClient = llm.NewOpenAIClient(cfg)
+	var searcher *indexer.Searcher
+	if cfg.EnableLLMCache {
+		cacheTTL := time.Duration(cfg.LLMCacheTTL) * time.Second
+		llmClient = llm.NewCachedLLMClient(llmClient, cacheTTL, true)
+	}
+	searcher = indexer.NewSearcher(llmClient)
+
+	result, err := searcher.Search(ctx, req.Query, tree)
+	if err != nil {
+		return mcp.NewToolResultErrorf("搜索失败：%v", err), nil
+	}
+
+	if req.OutputPath != nil && *req.OutputPath != "" {
+		if err := output.SaveSearchResult(result, *req.OutputPath); err != nil {
+			return mcp.NewToolResultErrorf("结果保存失败：%v", err), nil
+		}
+	}
+
+	referencedNodes := make([]ReferencedNode, 0, len(result.Nodes))
+	for _, node := range result.Nodes {
+		referencedNodes = append(referencedNodes, ReferencedNode{
+			ID:        node.ID,
+			Title:     node.Title,
+			StartPage: node.StartPage,
+			EndPage:   node.EndPage,
+		})
+	}
+
+	response := SearchIndexResponse{
+		Success:         true,
+		Query:           result.Query,
+		Answer:          result.Answer,
+		ReferencedNodes: referencedNodes,
+		SearchTime:      time.Since(startTime).Seconds(),
+	}
+
+	return marshalResult(response)
 }
 
 func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
