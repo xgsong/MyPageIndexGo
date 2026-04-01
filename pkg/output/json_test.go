@@ -24,8 +24,8 @@ func TestSaveAndLoadIndexTree(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "*.json")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
-	require.NoError(t, os.Remove(tmpPath))
 	require.NoError(t, tmpFile.Close())
+	require.NoError(t, os.Remove(tmpPath))
 
 	// Save the index
 	err = SaveIndexTree(tree, tmpPath)
