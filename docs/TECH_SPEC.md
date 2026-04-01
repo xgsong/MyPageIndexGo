@@ -312,6 +312,13 @@ PDF解析流程:
 
 ## 配置项
 
+### 配置文件结构
+配置采用分层管理策略：
+1. **敏感信息**：API密钥等敏感数据通过`.env`文件或环境变量管理
+2. **应用配置**：所有非敏感配置通过`config.yaml`文件管理
+3. **代码常量**：算法参数和业务逻辑常量建议提取到配置中
+
+### 当前配置项
 ```yaml
 # LLM配置
 openai_base_url: "https://api.openai.com/v1"
@@ -345,6 +352,47 @@ enable_search_cache: false
 # 日志配置
 log_level: "info"
 ```
+
+### 硬编码配置提取建议
+代码审查发现存在硬编码配置，建议扩展`Config`结构进行分类管理：
+
+```go
+type Config struct {
+    // 现有配置字段...
+    
+    // 算法参数配置
+    AlgorithmParams struct {
+        MaxTOCDetectionPages      int     `yaml:"max_toc_detection_pages"`
+        MinTOCConfidence          float64 `yaml:"min_toc_confidence"`
+        PageRangeOverlapThreshold int     `yaml:"page_range_overlap_threshold"`
+        ChapterTitlePatterns      []string `yaml:"chapter_title_patterns"`
+        SubsectionPatterns        []string `yaml:"subsection_patterns"`
+    } `yaml:"algorithm_params"`
+    
+    // 处理阈值配置
+    ProcessingThresholds struct {
+        MinPagesForTOC            int     `yaml:"min_pages_for_toc"`
+        MaxChapterDepth           int     `yaml:"max_chapter_depth"`
+        ContentPreviewMaxChars    int     `yaml:"content_preview_max_chars"`
+        NodeMergeSimilarity       float64 `yaml:"node_merge_similarity"`
+    } `yaml:"processing_thresholds"`
+    
+    // 业务逻辑配置
+    BusinessLogic struct {
+        UseChineseNumerals        bool   `yaml:"use_chinese_numerals"`
+        AutoDetectLanguage        bool   `yaml:"auto_detect_language"`
+        EnableSmartTitleInference bool   `yaml:"enable_smart_title_inference"`
+        DefaultDocumentTitle      string `yaml:"default_document_title"`
+    } `yaml:"business_logic"`
+}
+```
+
+### 配置管理最佳实践
+1. **环境特定配置**：支持不同环境（开发、测试、生产）的配置
+2. **配置验证**：启动时验证配置完整性，提供明确的错误信息
+3. **配置热重载**：支持运行时配置更新（可选）
+4. **配置文档化**：所有配置项必须有明确的文档说明
+5. **默认值管理**：提供合理的默认值，减少必需配置项
 
 ## 并发模型
 
@@ -397,6 +445,58 @@ TOC处理支持多种模式：
 - `ModeTOCNoPageNumbers`: 有目录无页码
 - `ModeNoTOC`: 无目录
 
+### 职责拆分模式
+高复杂度函数重构采用职责拆分模式：
+- `generateTreeFromTOC`函数（原372行）拆分为10个独立函数：
+  1. `prepareTOCItems`: 数据预处理，确保PhysicalIndex不为空
+  2. `sortTOCItemsByPage`: 按页码和列表索引排序
+  3. `calculatePageRanges`: 计算每个条目的页面范围
+  4. `buildTreeStructure`: 构建树形结构，创建节点映射
+  5. `fillPlaceholderTitles`: 填充占位符标题
+  6. `cleanNodeStructure`: 清理节点结构，移除空子节点
+  7. `reorganizeRootNodes`: 重新组织根节点
+  8. `mergeDuplicateChapters`: 合并重复章节
+  9. `recalculateParentPageRanges`: 重新计算父节点页面范围
+  10. `createRootNode`: 创建根节点
+  11. `createFlatStructure`: 创建扁平结构（后备方案）
+- 重构后的主函数清晰展示10步处理流程：
+  ```go
+  func (g *IndexGenerator) generateTreeFromTOC(items []TOCItem, pageTexts []string, totalPages int) *document.Node {
+    if len(items) == 0 {
+      return nil
+    }
+    // Step 1: Prepare TOC items
+    items = prepareTOCItems(items)
+    // Step 2: Sort items by page number
+    items = sortTOCItemsByPage(items)
+    // Step 3: Calculate page ranges
+    items = calculatePageRanges(items, totalPages)
+    // Step 4: Build tree structure
+    nodes, rootNodes := buildTreeStructure(items, g.pageTextMap, totalPages)
+    // Step 5: Fill placeholder titles
+    nodes = fillPlaceholderTitles(nodes, items)
+    // Step 6: Reorganize root nodes
+    rootNodes = reorganizeRootNodes(nodes, rootNodes)
+    // Step 7: Clean node structure
+    rootNodes = cleanNodeStructure(rootNodes)
+    // Step 8: Merge duplicate chapters
+    rootNodes, nodes = mergeDuplicateChapters(rootNodes, nodes)
+    // Step 9: Recalculate parent page ranges
+    rootNodes = recalculateParentPageRanges(rootNodes)
+    // Step 10: Create root node
+    if len(rootNodes) == 0 {
+      // Fallback: create flat structure
+      return createFlatStructure(items, totalPages)
+    }
+    return createRootNode(rootNodes, totalPages)
+  }
+  ```
+- 优势：
+  - 每个函数职责单一，易于理解和测试
+  - 代码行数符合项目规范（静态语言不超过250行）
+  - 提高可维护性和可读性
+  - 便于后续扩展和优化
+
 ## 迁移优势
 
 | 维度 | Python | Go |
@@ -408,7 +508,31 @@ TOC处理支持多种模式：
 | 跨编译 | 复杂 | 简单，一行命令 |
 | 部署 | 需要依赖管理 | 下载即运行，零依赖 |
 
-## 注意事项
+## 代码质量与架构规范
+
+### 代码审查与重构
+项目遵循严格的代码质量标准和架构规范：
+
+1. **函数复杂度控制**：
+   - 动态语言（Python/JavaScript/TypeScript）每个文件不超过200行
+   - 静态语言（Go/Java/Rust）每个文件不超过250行
+   - 高复杂度函数必须按职责拆分，确保每个函数单一职责
+
+2. **架构设计关注点**（持续警惕的"坏味道"）：
+   - **僵化（Rigidity）**：系统难以变更，微小改动引发连锁反应 → 引入接口抽象、策略模式
+   - **冗余（Redundancy）**：相同逻辑重复出现 → 提取公共函数或类
+   - **循环依赖（Circular Dependency）**：模块相互依赖 → 使用接口解耦、事件机制
+   - **脆弱性（Fragility）**：修改一处导致看似无关部分出错 → 遵循单一职责原则
+   - **晦涩性（Obscurity）**：代码结构混乱，意图不明 → 命名清晰、注释得当
+   - **数据泥团（Data Clump）**：多个参数总是一起出现 → 封装为数据结构或值对象
+   - **不必要的复杂性（Needless Complexity）**：过度设计 → 遵循YAGNI原则，KISS原则
+
+3. **近期重构成果**：
+   - **高复杂度函数拆分**：`generateTreeFromTOC`函数（原372行）拆分为10个独立函数
+   - **代码格式化**：所有Go文件已通过`gofmt`格式化，确保代码风格一致
+   - **配置管理优化**：提出硬编码配置提取方案，建议扩展Config结构分类管理
+
+### 注意事项
 
 1. **纯Go优先**：使用纯Go实现的文本提取库，避免CGO简化交叉编译
 
@@ -421,3 +545,5 @@ TOC处理支持多种模式：
 5. **环境配置**：配置优先从 `config.yaml` 读取，敏感信息从 `.env` 或环境变量读取
 
 6. **多格式扩展**：新增格式只需要实现 `DocumentParser` 接口，并在 `ParserRegistry` 注册
+
+7. **代码规范遵循**：所有代码必须通过`gofmt`格式化，并通过`golangci-lint`检查
