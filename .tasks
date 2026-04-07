@@ -1,0 +1,57 @@
+# P0 Production Readiness Fixes
+
+- [x] 恢复关键调试日志 (meta_processor_verify.go, toc_detection.go)
+  - meta_processor_verify.go: 3 debug logs (lines 40, 108, 116)
+  - toc_detection.go: 11 debug logs
+  - Commit: c3fd72d, b5a6145
+  
+- [x] OCR 自动检测阈值从 0.5 降至 0.3
+  - pdf.go:81: `emptyPageCount > len(pages)*3/10`
+  - Commit: 74bd984
+
+- [x] 为 parseLLMJSONResponse 添加单元测试 (错误路径)
+  - Coverage: 92.9%
+  - File: toc_detection_test.go
+
+- [x] 为 detectTOCPage 添加单元测试 (错误路径)
+  - Coverage: 100%
+  - File: toc_detection_test.go
+
+- [x] 为 findTOCPages 添加单元测试
+  - Coverage: 100%/82.6%
+  - File: toc_detection_test.go
+
+- [x] 为 extractTOCContent 添加单元测试 (错误路径)
+  - Coverage: 100%
+  - File: toc_detection_test.go
+
+- [x] 为 parseTOCTransformerResponse 添加单元测试 (错误路径)
+  - Coverage: 100%
+  - File: toc_detection_test.go
+
+- [x] 为 addPhysicalIndexToTOC 添加单元测试
+  - Coverage: 94.7%
+  - File: toc_detection_test.go
+
+- [x] 为 CheckTitleAppearance 添加单元测试 (错误路径)
+  - Coverage: 100%
+  - File: toc_verify_appearance_test.go
+
+- [x] 为 CheckAllItemsAppearanceInStart 添加单元测试 (并发安全)
+  - Coverage: 100%
+  - File: toc_verify_appearance_test.go
+  - Tests: ConcurrentSafety, ContextCancellation, MixedResults
+
+- [x] 运行测试验证所有 P0 修复
+  - Command: go test -race ./pkg/indexer/...
+  - Result: PASS (11.768s)
+  - Coverage: 49.0%
+  - No data races detected
+
+## Verification Summary
+
+All 11 P0 tasks completed and verified:
+- Debug logs restored for production troubleshooting
+- OCR threshold lowered from 50% to 30%
+- 8 critical functions tested with comprehensive error path coverage
+- All tests pass race detector
