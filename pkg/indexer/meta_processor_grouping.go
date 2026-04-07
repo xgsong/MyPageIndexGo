@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/xgsong/mypageindexgo/pkg/prompts"
 )
 
 // pageListToGroupText groups pages into text chunks with token-based limits.
@@ -140,34 +142,7 @@ func (mp *MetaProcessor) addPageNumberToTOC(ctx context.Context, toc []TOCItem, 
 	}
 
 	structureJSON, _ := json.Marshal(toc)
-
-	prompt := fmt.Sprintf(`You are given an JSON structure of a document and a partial part of the document. Your task is to check if the title that is described in the structure is started in the partial given document.
-
-The provided text contains tags like <physical_index_X> and <physical_index_X> to indicate the physical location of the page X.
-
-If the full target section starts in the partial given document, insert the given JSON structure with the "start": "yes", and "start_index": "<physical_index_X>".
-
-If the full target section does not start in the partial given document, insert "start": "no",  "start_index": None.
-
-The response should be in the following format.
-    [
-        {
-            "structure": "structure index, x.x.x or None (string)",
-            "title": "title of the section",
-            "start": "yes or no",
-            "physical_index": "<physical_index_X> (keep the format)" or None
-        },
-        ...
-    ]
-The given structure contains the result of the previous part, you need to fill the result of the current part, do not change the previous result.
-Directly return the final JSON structure. Do not output anything else.
-
-Current Partial Document:
-%s
-
-Given Structure
-%s
-`, content, string(structureJSON))
+	prompt := prompts.AddPageNumberToTOCPrompt(content, string(structureJSON))
 
 	response, err := mp.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
@@ -239,33 +214,9 @@ func (mp *MetaProcessor) processNonePageNumbers(ctx context.Context, items []TOC
 			}
 		}
 
-		// Ask LLM to find the section location
+	// Ask LLM to find the section location
 		itemJSON, _ := json.Marshal(items[i])
-		prompt := fmt.Sprintf(`You are given an JSON structure of a document and a partial part of the document. Your task is to check if the title that is described in the structure is started in the partial given document.
-
-The provided text contains tags like <physical_index_X> and <physical_index_X> to indicate the physical location of the page X.
-
-If the full target section starts in the partial given document, insert the given JSON structure with the "start": "yes", and "start_index": "<physical_index_X>".
-
-If the full target section does not start in the partial given document, insert "start": "no", "start_index": None.
-
-The response should be in the following format.
-    [
-        {
-            "structure": "structure index",
-            "title": "title of the section",
-            "start": "yes or no",
-            "physical_index": "<physical_index_X> (keep the format)" or None
-        }
-    ]
-Directly return the final JSON structure. Do not output anything else.
-
-Current Partial Document:
-%s
-
-Given Structure
-%s
-`, pageContents.String(), string(itemJSON))
+		prompt := prompts.SingleTOCItemIndexFixerPrompt(pageContents.String(), string(itemJSON))
 
 		response, err := mp.llmClient.GenerateSimple(ctx, prompt)
 		if err != nil {

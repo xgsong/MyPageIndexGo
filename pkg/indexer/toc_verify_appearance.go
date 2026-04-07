@@ -2,12 +2,12 @@ package indexer
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
+	"github.com/xgsong/mypageindexgo/pkg/prompts"
 )
 
 // AppearanceChecker checks if TOC items appear at the start of their pages.
@@ -42,18 +42,7 @@ func (ac *AppearanceChecker) CheckTitleAppearance(ctx context.Context, item TOCI
 	}
 
 	pageText := pageTexts[pageIdx]
-	prompt := fmt.Sprintf(`Your job is to check if the given section appears or starts in the given page_text.
-
-Note: do fuzzy matching, ignore any space inconsistency in the page_text.
-
-The given section title is %s.
-The given page_text is %s.
-
-Reply format:
-{
-    "answer": "yes or no"
-}
-Directly return the final JSON structure. Do not output anything else.`, item.Title, pageText)
+	prompt := prompts.TitleAppearancePrompt(item.Title, pageText)
 
 	response, err := ac.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
@@ -73,21 +62,7 @@ Directly return the final JSON structure. Do not output anything else.`, item.Ti
 // CheckTitleAppearanceInStart checks if a title appears at the BEGINNING of a page.
 // Python: check_title_appearance_in_start in page_index.py:48-71
 func (ac *AppearanceChecker) CheckTitleAppearanceInStart(ctx context.Context, title string, pageText string) (string, error) {
-	prompt := fmt.Sprintf(`You will be given the current section title and the current page_text.
-Your job is to check if the current section starts in the beginning of the given page_text.
-If there are other contents before the current section title, then the current section does not start in the beginning of the given page_text.
-If the current section title is the first content in the given page_text, then the current section starts in the beginning of the given page_text.
-
-Note: do fuzzy matching, ignore any space inconsistency in the page_text.
-
-The given section title is %s.
-The given page_text is %s.
-
-reply format:
-{
-    "start_begin": "yes or no"
-}
-Directly return the final JSON structure. Do not output anything else.`, title, pageText)
+	prompt := prompts.TitleAppearanceInStartPrompt(title, pageText)
 
 	response, err := ac.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {

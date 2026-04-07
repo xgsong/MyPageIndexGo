@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/xgsong/mypageindexgo/pkg/prompts"
 )
 
 // extractTOCContent extracts and cleans TOC content from pages
@@ -34,21 +36,11 @@ func (d *TOCDetector) extractTOCContent(pages []string, tocPageIndices []int) st
 // checkTOCTransformationComplete checks if TOC transformation is complete
 // Python: check_if_toc_transformation_is_complete in page_index.py:143-158
 func (d *TOCDetector) checkTOCTransformationComplete(ctx context.Context, rawContent, transformedContent string) bool {
-	prompt := fmt.Sprintf(`请检查整理后的目录是否完整，包含了原始目录的所有内容。
-请严格按照JSON格式返回结果，不要任何其他内容：
-{
-    "completed": "yes或者no"
-}
-
-原始目录内容：
-%s
-
-整理后的目录内容：
-%s`, rawContent, transformedContent)
+	prompt := prompts.TOCCompletenessCheckPrompt(rawContent, transformedContent)
 
 	response, err := d.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
-		return true // Assume complete on error
+		return true
 	}
 
 	var result struct {
@@ -65,7 +57,7 @@ func (d *TOCDetector) checkTOCTransformationComplete(ctx context.Context, rawCon
 // Python: toc_transformer in page_index.py:273-336
 // Includes completeness checking and continuation for long TOCs
 func (d *TOCDetector) extractTOCFromLLM(ctx context.Context, tocContent string) ([]TOCItem, error) {
-	prompt := tocTransformerPrompt(tocContent)
+	prompt := prompts.TOCTransformerPrompt(tocContent)
 
 	response, err := d.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
@@ -89,15 +81,7 @@ func (d *TOCDetector) extractTOCFromLLM(ctx context.Context, tocContent string) 
 			jsonContent = jsonContent[:lastBrace+2]
 		}
 
-		continuePrompt := fmt.Sprintf(`Your task is to continue the table of contents json structure, directly output the remaining part of the json structure.
-
-The raw table of contents json structure is:
-%s
-
-The incomplete transformed table of contents json structure is:
-%s
-
-Please continue the json structure, directly output the remaining part of the json structure.`, tocContent, jsonContent)
+		continuePrompt := prompts.TOCContinuePrompt(tocContent, jsonContent)
 
 		newResponse, err := d.llmClient.GenerateSimple(ctx, continuePrompt)
 		if err != nil {

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/rs/zerolog/log"
+	"github.com/xgsong/mypageindexgo/pkg/prompts"
 )
 
 const (
@@ -214,18 +215,7 @@ func (mp *MetaProcessor) fixSingleItem(ctx context.Context, incorrectItem TOCIte
 
 	// Ask LLM to find the section
 	// Python: single_toc_item_index_fixer in page_index.py:740-756
-	prompt := fmt.Sprintf(`You are given a section title and several pages of a document, your job is to find the physical index of the start page of the section in the partial document.
-
-The provided pages contains tags like <physical_index_X> and <physical_index_X> to indicate the physical location of the page X.
-
-Reply in a JSON format:
-{
-    "physical_index": "<physical_index_X> (keep the format)"
-}
-Directly return the final JSON structure. Do not output anything else.
-
-Section Title: %s
-Document pages: %s`, incorrectItem.Title, content.String())
+	prompt := prompts.FindSectionLocationPrompt(incorrectItem.Title, content.String())
 
 	response, err := mp.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {

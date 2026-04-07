@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/xgsong/mypageindexgo/pkg/prompts"
 )
 
 // Pre-compiled regular expressions for performance
@@ -30,42 +32,6 @@ func transformDotsToColon(text string) string {
 	text = fiveDotsRegex.ReplaceAllString(text, ": ")
 	text = dotSpaceRegex.ReplaceAllString(text, ": ")
 	return text
-}
-
-// tocDetectorPrompt creates prompt for TOC detection
-func tocDetectorPrompt(content string) string {
-	return fmt.Sprintf(`Your job is to detect if there is a table of content provided in the given text.
-
-Given text: %s
-
-return the following JSON format:
-{
-    "toc_detected": "yes or no"
-}
-
-Directly return the final JSON structure. Do not output anything else.
-Please note: abstract, summary, notation list, figure list, table list, etc. are not table of contents.`, content)
-}
-
-// tocTransformerPrompt creates prompt for TOC transformation
-func tocTransformerPrompt(tocContent string) string {
-	return fmt.Sprintf(`你现在需要将给定的目录内容转换为标准的JSON格式。
-请严格按照以下要求返回结果：
-1. 只返回JSON格式内容，不要任何其他解释、说明、或者额外文本
-2. JSON结构必须严格符合下面的格式要求：
-{
-    "table_of_contents": [
-        {
-            "structure": "目录层级编号，字符串类型，比如"1", "1.1", "2.3.1"，没有则填"None"",
-            "title": "章节标题，字符串类型",
-            "page": 页码，数字类型，没有则填null
-        }
-    ]
-}
-3. 确保JSON格式正确，没有语法错误
-
-现在要转换的目录内容是：
-%s`, tocContent)
 }
 
 // parseLLMJSONResponse parses JSON from LLM response
@@ -222,7 +188,7 @@ func convertPhysicalIndexToInt(physicalIndex string) (int, error) {
 
 // detectTOCPage asks LLM if page contains TOC
 func (d *TOCDetector) detectTOCPage(ctx context.Context, content string) (bool, error) {
-	prompt := tocDetectorPrompt(content)
+	prompt := prompts.TOCDetectorPrompt(content)
 
 	response, err := d.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
