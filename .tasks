@@ -1,11 +1,11 @@
-- [x] 恢复关键调试日志 (meta_processor_verify.go, toc_detection.go) - ✅ 已验证：meta_processor_verify.go:40-43, toc_detection.go:44 有 log.Debug
-- [x] OCR 自动检测阈值从 0.5 降至 0.3 - ✅ 已验证：pkg/document/pdf.go:81 使用 len(pages)*3/10
-- [x] 为 parseLLMJSONResponse 添加单元测试 (错误路径) - ✅ toc_detection_test.go, multiple test cases
-- [x] 为 detectTOCPage 添加单元测试 (错误路径) - ✅ toc_detection_test.go
-- [x] 为 findTOCPages 添加单元测试 - ✅ toc_detection_test.go
-- [x] 为 extractTOCContent 添加单元测试 (错误路径) - ✅ toc_detection_test.go
-- [x] 为 parseTOCTransformerResponse 添加单元测试 (错误路径) - ✅ toc_detection_test.go
-- [x] 为 addPhysicalIndexToTOC 添加单元测试 - ✅ toc_detection_test.go
-- [x] 为 CheckTitleAppearance 添加单元测试 (错误路径) - ✅ toc_verify_appearance_test.go
-- [x] 为 CheckAllItemsAppearanceInStart 添加单元测试 (并发安全) - ✅ toc_verify_appearance_test.go
-- [x] 运行测试验证所有 P0 修复 - ✅ go test -race ./pkg/indexer/... PASS (cached), coverage: 49.0%
+- [x] 恢复关键调试日志 (meta_processor_verify.go, toc_detection.go)
+- [x] OCR 自动检测阈值从 0.5 降至 0.3
+- [x] 为 parseLLMJSONResponse 添加单元测试 (错误路径)
+- [x] 为 detectTOCPage 添加单元测试 (错误路径)
+- [x] 为 findTOCPages 添加单元测试
+- [x] 为 extractTOCContent 添加单元测试 (错误路径)
+- [x] 为 parseTOCTransformerResponse 添加单元测试 (错误路径)
+- [x] 为 addPhysicalIndexToTOC 添加单元测试
+- [x] 为 CheckTitleAppearance 添加单元测试 (错误路径)
+- [x] 为 CheckAllItemsAppearanceInStart 添加单元测试 (并发安全)
+- [x] 运行测试验证所有 P0 修复
