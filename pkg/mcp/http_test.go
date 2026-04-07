@@ -332,13 +332,13 @@ func TestServerConcurrency(t *testing.T) {
 func TestStdioServer(t *testing.T) {
 	t.Run("creation", func(t *testing.T) {
 		mcpSrv := server.NewMCPServer("test", "1.0.0")
-		stdioSrv := NewStdioServer(mcpSrv)
+		stdioSrv := NewStdioServer(context.Background(), mcpSrv)
 		require.NotNil(t, stdioSrv)
 	})
 
 	t.Run("shutdown", func(t *testing.T) {
 		mcpSrv := server.NewMCPServer("test", "1.0.0")
-		stdioSrv := NewStdioServer(mcpSrv)
+		stdioSrv := NewStdioServer(context.Background(), mcpSrv)
 
 		ctx := context.Background()
 		err := stdioSrv.Shutdown(ctx)

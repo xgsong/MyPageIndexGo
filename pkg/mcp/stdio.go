@@ -17,8 +17,8 @@ type StdioServer struct {
 }
 
 // NewStdioServer creates a new stdio MCP server.
-func NewStdioServer(mcpSrv *server.MCPServer) *StdioServer {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewStdioServer(ctx context.Context, mcpSrv *server.MCPServer) *StdioServer {
+	ctx, cancel := context.WithCancel(ctx)
 	return &StdioServer{
 		mcpSrv: mcpSrv,
 		ctx:    ctx,
@@ -35,7 +35,17 @@ func (s *StdioServer) Start() error {
 		Str("stdout", os.Stdout.Name()).
 		Msg("📡 Waiting for connections on stdin/stdout")
 
-	return server.ServeStdio(s.mcpSrv)
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- server.ServeStdio(s.mcpSrv)
+	}()
+
+	select {
+	case err := <-errChan:
+		return err
+	case <-s.ctx.Done():
+		return s.Shutdown(s.ctx)
+	}
 }
 
 // Shutdown gracefully stops the stdio server.

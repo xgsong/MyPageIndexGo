@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -65,10 +66,13 @@ func main() {
 }
 
 func startServers(ctx context.Context, mcpSrv *mcp.MCPServer) {
+	var servers []interface{ Shutdown(context.Context) error }
+
 	switch *transport {
 	case "stdio":
 		log.Info().Msg("📡 Using stdio transport")
-		stdioSrv := mcp.NewStdioServer(mcpSrv)
+		stdioSrv := mcp.NewStdioServer(ctx, mcpSrv)
+		servers = append(servers, stdioSrv)
 		go func() {
 			if err := stdioSrv.Start(); err != nil {
 				log.Error().Err(err).Msg("❌ Stdio server error")
@@ -78,23 +82,25 @@ func startServers(ctx context.Context, mcpSrv *mcp.MCPServer) {
 	case "http":
 		log.Info().Msg("🌐 Using HTTP transport")
 		httpSrv := createHTTPServer(mcpSrv)
+		servers = append(servers, httpSrv)
 		go func() {
-			if err := httpSrv.Start(); err != nil {
+			if err := httpSrv.Start(); err != nil && err != http.ErrServerClosed {
 				log.Error().Err(err).Msg("❌ HTTP server error")
 			}
 		}()
 
 	case "both":
 		log.Info().Msg("🔄 Using both stdio and HTTP transports")
-		stdioSrv := mcp.NewStdioServer(mcpSrv)
+		stdioSrv := mcp.NewStdioServer(ctx, mcpSrv)
 		httpSrv := createHTTPServer(mcpSrv)
+		servers = append(servers, stdioSrv, httpSrv)
 		go func() {
 			if err := stdioSrv.Start(); err != nil {
 				log.Error().Err(err).Msg("❌ Stdio server error")
 			}
 		}()
 		go func() {
-			if err := httpSrv.Start(); err != nil {
+			if err := httpSrv.Start(); err != nil && err != http.ErrServerClosed {
 				log.Error().Err(err).Msg("❌ HTTP server error")
 			}
 		}()
@@ -102,6 +108,20 @@ func startServers(ctx context.Context, mcpSrv *mcp.MCPServer) {
 	default:
 		log.Fatal().Str("transport", *transport).Msg("❌ Invalid transport mode")
 	}
+
+	<-ctx.Done()
+	log.Info().Msg("🔄 Received shutdown signal, stopping servers...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for _, srv := range servers {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Error().Err(err).Msg("❌ Server shutdown error")
+		}
+	}
+
+	log.Info().Msg("✅ All servers stopped gracefully")
 }
 
 func createHTTPServer(mcpSrv *mcp.MCPServer) *mcp.HTTPServer {
