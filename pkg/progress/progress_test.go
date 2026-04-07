@@ -2,6 +2,7 @@ package progress
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -236,15 +237,15 @@ func TestCtxWithProgress(t *testing.T) {
 			items[i] = i
 		}
 
-		var count int
+		var count atomic.Int32
 		err := CtxWithProgress(ctx, items, "test", func(ctx context.Context, item int, tracker *Tracker) error {
 			time.Sleep(1 * time.Millisecond)
-			count++
+			count.Add(1)
 			return nil
 		}, 5)
 
 		assert.NoError(t, err)
-		assert.Equal(t, 10, count)
+		assert.Equal(t, int32(10), count.Load())
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {

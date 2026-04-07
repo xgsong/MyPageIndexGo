@@ -158,7 +158,10 @@ func CtxWithProgress[T any](ctx context.Context, items []T, desc string, process
 	for i := range items {
 		go func(idx int) {
 			sem <- struct{}{}
-			defer func() { <-sem }()
+			defer func() {
+				<-sem
+				tracker.Add(1)
+			}()
 
 			err := processor(ctx, items[idx], tracker)
 			errCh <- err
