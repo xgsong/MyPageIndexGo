@@ -36,7 +36,7 @@ func buildMCPServer(t *testing.T) {
 
 	// Cleanup on test exit
 	t.Cleanup(func() {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	})
 }
 
@@ -113,7 +113,7 @@ func TestMCP_HTTP_Health(t *testing.T) {
 		t.Skip("Skipping test: server failed to start")
 	}
 	require.NoError(t, err, "Failed to connect to health endpoint")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -121,7 +121,7 @@ func TestMCP_HTTP_Health(t *testing.T) {
 	readyURL := fmt.Sprintf("http://localhost:%d/ready", port)
 	resp, err = http.Get(readyURL)
 	require.NoError(t, err, "Failed to connect to ready endpoint")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -167,12 +167,12 @@ func TestMCP_HTTP_Auth(t *testing.T) {
 		_ = cmd.Wait()
 		t.Skip("Skipping test: server failed to start")
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Test without auth token
 	resp, err = http.Post(mcpEndpoint, "application/json", nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
 	// Test with wrong auth token
@@ -181,7 +181,7 @@ func TestMCP_HTTP_Auth(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer wrong-token")
 	resp, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
 	// Test with correct auth token (will get 400 because request body is empty, but not 401)
@@ -190,7 +190,7 @@ func TestMCP_HTTP_Auth(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+testToken)
 	resp, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
