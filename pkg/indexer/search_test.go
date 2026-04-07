@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewSearcher(t *testing.T) {
-	mockLLM := &MockLLMClient{}
+	mockLLM := &mockLLMClient{}
 	searcher := NewSearcher(mockLLM)
 	assert.NotNil(t, searcher)
 }
@@ -23,8 +23,8 @@ func TestSearch_ValidQuery(t *testing.T) {
 		},
 	}
 
-	mockLLM := &MockLLMClient{
-		SearchFunc: func(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error) {
+	mockLLM := &mockLLMClient{
+		searchFunc: func(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error) {
 			return expectedResult, nil
 		},
 	}
@@ -41,7 +41,7 @@ func TestSearch_ValidQuery(t *testing.T) {
 }
 
 func TestSearch_EmptyQuery(t *testing.T) {
-	mockLLM := &MockLLMClient{}
+	mockLLM := &mockLLMClient{}
 	searcher := NewSearcher(mockLLM)
 	root := document.NewNode("Root", 1, 10)
 	tree := document.NewIndexTree(root, 10)
@@ -53,7 +53,7 @@ func TestSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestSearch_NilTree(t *testing.T) {
-	mockLLM := &MockLLMClient{}
+	mockLLM := &mockLLMClient{}
 	searcher := NewSearcher(mockLLM)
 
 	ctx := context.Background()
@@ -63,7 +63,7 @@ func TestSearch_NilTree(t *testing.T) {
 }
 
 func TestSearch_NilRoot(t *testing.T) {
-	mockLLM := &MockLLMClient{}
+	mockLLM := &mockLLMClient{}
 	searcher := NewSearcher(mockLLM)
 	tree := &document.IndexTree{
 		Root: nil,

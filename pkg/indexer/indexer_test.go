@@ -347,7 +347,7 @@ func TestCalculateOptimalBatchSize(t *testing.T) {
 }
 
 func TestTOCDetector_NewTOCDetector(t *testing.T) {
-	mockLLM := &MockLLMClient{}
+	mockLLM := &mockLLMClient{}
 	cfg := config.DefaultConfig()
 	detector := NewTOCDetector(mockLLM, cfg)
 	assert.NotNil(t, detector)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
+	"github.com/xgsong/mypageindexgo/pkg/language"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 	"github.com/xgsong/mypageindexgo/pkg/tokenizer"
 )
@@ -128,7 +129,7 @@ func TestIndexGenerator_Validation(t *testing.T) {
 		{
 			name:      "nil config",
 			cfg:       nil,
-			llmClient: &MockLLMClient{},
+			llmClient: &mockLLMClient{},
 			wantErr:   true,
 		},
 		{
@@ -158,7 +159,7 @@ func TestIndexGenerator_ConfigDefaults(t *testing.T) {
 		MaxConcurrency:   0, // Should default to 1
 	}
 
-	mockLLM := &MockLLMClient{}
+	mockLLM := &mockLLMClient{}
 	gen, err := NewIndexGenerator(cfg, mockLLM)
 	require.NoError(t, err)
 	assert.NotNil(t, gen)
@@ -166,7 +167,7 @@ func TestIndexGenerator_ConfigDefaults(t *testing.T) {
 
 func TestSearcher_Validation(t *testing.T) {
 	ctx := context.Background()
-	searcher := NewSearcher(&MockLLMClient{})
+	searcher := NewSearcher(&mockLLMClient{})
 
 	tests := []struct {
 		name    string
@@ -200,6 +201,155 @@ func TestSearcher_Validation(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 			}
+		})
+	}
+}
+
+func TestIndexGenerator_Update(t *testing.T) {
+	mockLLM := &mockLLMClient{
+		generateStructureFunc: func(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
+			return document.NewNode("Test Chapter", 1, 5), nil
+		},
+	}
+
+	cfg := &config.Config{
+		OpenAIModel:       "gpt-4o-mini",
+		MaxTokensPerNode:  500,
+		MaxConcurrency:    2,
+		GenerateSummaries: false,
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	require.NoError(t, err)
+
+	t.Run("successful update", func(t *testing.T) {
+		existingTree := &document.IndexTree{
+			Root:       document.NewNode("Existing", 1, 5),
+			TotalPages: 5,
+		}
+
+		newDoc := &document.Document{
+			Pages: []document.Page{
+				{Number: 1, Text: "New Chapter 1"},
+				{Number: 2, Text: "New Chapter 2"},
+			},
+		}
+
+		ctx := context.Background()
+		mergedTree, err := gen.Update(ctx, existingTree, newDoc)
+
+		require.NoError(t, err)
+		assert.NotNil(t, mergedTree)
+		assert.NotNil(t, mergedTree.Root)
+		assert.Greater(t, mergedTree.TotalPages, 5)
+	})
+
+	t.Run("nil existing tree", func(t *testing.T) {
+		newDoc := &document.Document{
+			Pages: []document.Page{{Number: 1, Text: "Test"}},
+		}
+
+		ctx := context.Background()
+		result, err := gen.Update(ctx, nil, newDoc)
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "nil existing index tree")
+	})
+
+	t.Run("nil new document", func(t *testing.T) {
+		existingTree := &document.IndexTree{
+			Root: document.NewNode("Existing", 1, 5),
+		}
+
+		ctx := context.Background()
+		result, err := gen.Update(ctx, existingTree, nil)
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "nil new document")
+	})
+}
+
+func TestIndexGenerator_Generate_EmptyDocument(t *testing.T) {
+	mockLLM := &mockLLMClient{}
+	cfg := &config.Config{
+		OpenAIModel:      "gpt-4o-mini",
+		MaxTokensPerNode: 500,
+		MaxConcurrency:   2,
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	require.NoError(t, err)
+
+	doc := &document.Document{
+		Pages: []document.Page{},
+	}
+
+	ctx := context.Background()
+	tree, err := gen.Generate(ctx, doc)
+
+	assert.Error(t, err)
+	assert.Nil(t, tree)
+	assert.Contains(t, err.Error(), "no pages")
+}
+
+func TestIndexGenerator_Generate_WithSummaries(t *testing.T) {
+	callCount := 0
+	mockLLM := &mockLLMClient{
+		generateStructureFunc: func(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
+			return document.NewNode("Test Chapter", 1, 2), nil
+		},
+		generateSummaryFunc: func(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
+			callCount++
+			return "Test summary", nil
+		},
+	}
+
+	cfg := &config.Config{
+		OpenAIModel:       "gpt-4o-mini",
+		MaxTokensPerNode:  500,
+		MaxConcurrency:    2,
+		GenerateSummaries: true,
+		EnableBatchCalls:  false,
+	}
+
+	gen, err := NewIndexGenerator(cfg, mockLLM)
+	require.NoError(t, err)
+
+	doc := &document.Document{
+		Pages: []document.Page{
+			{Number: 1, Text: "Chapter 1: Introduction"},
+			{Number: 2, Text: "Chapter 2: Methods"},
+		},
+	}
+
+	ctx := context.Background()
+	tree, err := gen.Generate(ctx, doc)
+
+	require.NoError(t, err)
+	assert.NotNil(t, tree)
+	assert.Greater(t, callCount, 0)
+}
+
+func TestCalculateOptimalBatchSize_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name           string
+		nodeCount      int
+		totalTokens    int
+		expectedBatch  int
+		expectedTokens int
+	}{
+		{"zero nodes", 0, 0, 0, 100000},
+		{"single node", 1, 1000, 1, 100000},
+		{"very large tokens", 100, 10000000, 10, 100000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			batchSize, tokensPerBatch := calculateOptimalBatchSize(tt.nodeCount, tt.totalTokens)
+			assert.Equal(t, tt.expectedBatch, batchSize)
+			assert.Equal(t, tt.expectedTokens, tokensPerBatch)
 		})
 	}
 }
