@@ -206,28 +206,30 @@ func TestCtxWithProgress(t *testing.T) {
 	t.Run("multiple items processed", func(t *testing.T) {
 		ctx := context.Background()
 		items := []string{"item1", "item2", "item3"}
-		var count int
+		var count atomic.Int32
 		err := CtxWithProgress(ctx, items, "test", func(ctx context.Context, item string, tracker *Tracker) error {
-			count++
+			count.Add(1)
 			return nil
 		}, 2)
 		assert.NoError(t, err)
-		assert.Equal(t, 3, count)
+		assert.Equal(t, int32(3), count.Load())
 	})
 
 	t.Run("error stops processing", func(t *testing.T) {
 		ctx := context.Background()
 		items := []string{"item1", "item2", "item3"}
-		var count int
+		var count atomic.Int32
 		err := CtxWithProgress(ctx, items, "test", func(ctx context.Context, item string, tracker *Tracker) error {
-			count++
+			count.Add(1)
 			if item == "item2" {
 				return assert.AnError
 			}
 			return nil
 		}, 1)
 		assert.Error(t, err)
-		assert.Equal(t, 3, count)
+		// At least 2 items processed (item1 and item2), but item3 may or may not have started
+		assert.GreaterOrEqual(t, count.Load(), int32(2))
+		assert.LessOrEqual(t, count.Load(), int32(3))
 	})
 
 	t.Run("concurrent processing", func(t *testing.T) {
@@ -255,16 +257,16 @@ func TestCtxWithProgress(t *testing.T) {
 			items[i] = i
 		}
 
-		var count int
+		var count atomic.Int32
 		err := CtxWithProgress(ctx, items, "test", func(ctx context.Context, item int, tracker *Tracker) error {
-			count++
-			if count >= 2 {
+			count.Add(1)
+			if count.Load() >= 2 {
 				cancel()
 			}
 			return nil
 		}, 1)
 
 		assert.NoError(t, err)
-		assert.GreaterOrEqual(t, count, 2)
+		assert.GreaterOrEqual(t, count.Load(), int32(2))
 	})
 }
