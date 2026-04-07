@@ -67,7 +67,7 @@ func (p *PDFParser) Parse(r io.Reader) (*Document, error) {
 	}
 
 	// Count empty pages to detect mixed-content PDFs
-	// Trigger OCR if all pages are empty or more than 50% are empty
+	// Trigger OCR if all pages are empty or more than 30% are empty
 	hasText := false
 	emptyPageCount := 0
 	for _, page := range pages {
@@ -78,7 +78,7 @@ func (p *PDFParser) Parse(r io.Reader) (*Document, error) {
 		}
 	}
 
-	if p.ocrClient != nil && (!hasText || emptyPageCount > len(pages)/2) {
+	if p.ocrClient != nil && (!hasText || emptyPageCount > len(pages)*3/10) {
 		log.Info().
 			Int("total_pages", len(pages)).
 			Int("empty_pages", emptyPageCount).

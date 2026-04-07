@@ -6,13 +6,16 @@ package indexer_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/xgsong/mypageindexgo/pkg/config"
+	"github.com/xgsong/mypageindexgo/pkg/document"
 	"github.com/xgsong/mypageindexgo/pkg/indexer"
+	"github.com/xgsong/mypageindexgo/pkg/language"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 )
 
@@ -39,7 +42,7 @@ func (m *MockLLMClient) GenerateSimple(ctx context.Context, prompt string) (stri
 	// Simulate rate limiting
 	if m.rateLimit && !m.rateLimited {
 		m.rateLimited = true
-		return "", &llm.RateLimitError{Message: "rate limit exceeded"}
+		return "", &RateLimitError{Message: "rate limit exceeded"}
 	}
 
 	// Simulate one-time failure
@@ -83,21 +86,47 @@ func (m *MockLLMClient) GetCallCount() int {
 	return m.callCount
 }
 
+func (m *MockLLMClient) GenerateStructure(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return nil, errors.New("GenerateStructure not implemented")
+}
+
+func (m *MockLLMClient) GenerateSummary(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return "", errors.New("GenerateSummary not implemented")
+}
+
+func (m *MockLLMClient) Search(ctx context.Context, query string, tree *document.IndexTree) (*document.SearchResult, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return nil, errors.New("Search not implemented")
+}
+
 func (m *MockLLMClient) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.callCount = 0
 	m.failed = false
 	m.rateLimited = false
+	m.response = ""
+	m.lastPrompt = ""
 }
 
 // ============================================================================
+
+func (m *MockLLMClient) GenerateBatchSummaries(ctx context.Context, requests []*llm.BatchSummaryRequest, lang language.Language) ([]*llm.BatchSummaryResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return nil, errors.New("GenerateBatchSummaries not implemented")
+}
+
 // CheckTitleAppearance Tests
 // ============================================================================
 
 func TestCheckTitleAppearance_NormalPath_TitleExists(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"answer": "yes"}`,
@@ -120,14 +149,13 @@ func TestCheckTitleAppearance_NormalPath_TitleExists(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 1)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.True(result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearance_PhysicalIndexNil(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{}
 	ac := indexer.NewAppearanceChecker(mockClient, &config.Config{})
@@ -141,14 +169,13 @@ func TestCheckTitleAppearance_PhysicalIndexNil(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 1)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.False(result)
 	is.Equal(0, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearance_PageIndexOutOfRange_Negative(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{}
 	ac := indexer.NewAppearanceChecker(mockClient, &config.Config{})
@@ -162,14 +189,13 @@ func TestCheckTitleAppearance_PageIndexOutOfRange_Negative(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 5)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.False(result)
 	is.Equal(0, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearance_PageIndexOutOfRange_Exceeds(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{}
 	ac := indexer.NewAppearanceChecker(mockClient, &config.Config{})
@@ -183,14 +209,13 @@ func TestCheckTitleAppearance_PageIndexOutOfRange_Exceeds(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 1)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.False(result)
 	is.Equal(0, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearance_LLMCallFailure(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		err: assert.AnError,
@@ -206,14 +231,13 @@ func TestCheckTitleAppearance_LLMCallFailure(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 1)
 
-	must.Error(err)
+	assert.Error(t, err)
 	is.False(result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearance_JSONParseError_InvalidJSON(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"answer": invalid json}`,
@@ -229,14 +253,13 @@ func TestCheckTitleAppearance_JSONParseError_InvalidJSON(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 1)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.False(result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearance_JSONParseError_WrongFormat(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"wrong_field": "yes"}`,
@@ -252,14 +275,13 @@ func TestCheckTitleAppearance_JSONParseError_WrongFormat(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 1)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.False(result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearance_AnswerNo(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"answer": "no"}`,
@@ -275,14 +297,13 @@ func TestCheckTitleAppearance_AnswerNo(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 1)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.False(result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearance_AnswerCaseInsensitive(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"answer": "YES"}`,
@@ -298,7 +319,7 @@ func TestCheckTitleAppearance_AnswerCaseInsensitive(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearance(ctx, item, pageTexts, 1)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.True(result)
 	is.Equal(1, mockClient.GetCallCount())
 }
@@ -376,7 +397,6 @@ func TestCheckTitleAppearance_TableDriven(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := assert.New(t)
-			must := require.New(t)
 
 			mockClient := &MockLLMClient{
 				response: tt.mockResponse,
@@ -388,9 +408,9 @@ func TestCheckTitleAppearance_TableDriven(t *testing.T) {
 			result, err := ac.CheckTitleAppearance(ctx, tt.item, tt.pageTexts, tt.startIndex)
 
 			if tt.expectError {
-				must.Error(err)
+				assert.Error(t, err)
 			} else {
-				must.NoError(err)
+				assert.NoError(t, err)
 			}
 			is.Equal(tt.expectResult, result)
 			is.Equal(tt.expectCallCount, mockClient.GetCallCount())
@@ -404,7 +424,6 @@ func TestCheckTitleAppearance_TableDriven(t *testing.T) {
 
 func TestCheckTitleAppearanceInStart_NormalPath_TitleAtStart(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"start_begin": "yes"}`,
@@ -414,14 +433,13 @@ func TestCheckTitleAppearanceInStart_NormalPath_TitleAtStart(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearanceInStart(ctx, "Chapter 1", "Chapter 1\nIntroduction content...")
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.Equal("yes", result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearanceInStart_EmptyPageText(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"start_begin": "no"}`,
@@ -431,14 +449,13 @@ func TestCheckTitleAppearanceInStart_EmptyPageText(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearanceInStart(ctx, "Chapter 1", "")
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.Equal("no", result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearanceInStart_EmptyTitle(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"start_begin": "no"}`,
@@ -448,14 +465,13 @@ func TestCheckTitleAppearanceInStart_EmptyTitle(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearanceInStart(ctx, "", "Some content")
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.Equal("no", result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearanceInStart_LLMFailure(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		err: assert.AnError,
@@ -465,14 +481,13 @@ func TestCheckTitleAppearanceInStart_LLMFailure(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearanceInStart(ctx, "Chapter 1", "content")
 
-	must.Error(err)
+	assert.Error(t, err)
 	is.Equal("no", result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearanceInStart_JSONParseError(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `invalid json`,
@@ -482,14 +497,13 @@ func TestCheckTitleAppearanceInStart_JSONParseError(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearanceInStart(ctx, "Chapter 1", "content")
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.Equal("no", result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearanceInStart_WrongResponseFormat(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"wrong_field": "yes"}`,
@@ -499,14 +513,13 @@ func TestCheckTitleAppearanceInStart_WrongResponseFormat(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearanceInStart(ctx, "Chapter 1", "content")
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.Equal("no", result)
 	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckTitleAppearanceInStart_EmptyStartBegin(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"start_begin": ""}`,
@@ -516,7 +529,7 @@ func TestCheckTitleAppearanceInStart_EmptyStartBegin(t *testing.T) {
 	ctx := context.Background()
 	result, err := ac.CheckTitleAppearanceInStart(ctx, "Chapter 1", "content")
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.Equal("no", result)
 	is.Equal(1, mockClient.GetCallCount())
 }
@@ -586,7 +599,6 @@ func TestCheckTitleAppearanceInStart_TableDriven(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := assert.New(t)
-			must := require.New(t)
 
 			mockClient := &MockLLMClient{
 				response: tt.mockResponse,
@@ -598,9 +610,9 @@ func TestCheckTitleAppearanceInStart_TableDriven(t *testing.T) {
 			result, err := ac.CheckTitleAppearanceInStart(ctx, tt.title, tt.pageText)
 
 			if tt.expectError {
-				must.Error(err)
+				assert.Error(t, err)
 			} else {
-				must.NoError(err)
+				assert.NoError(t, err)
 			}
 			is.Equal(tt.expectResult, result)
 			is.Equal(tt.expectCallCount, mockClient.GetCallCount())
@@ -614,7 +626,6 @@ func TestCheckTitleAppearanceInStart_TableDriven(t *testing.T) {
 
 func TestCheckAllItemsAppearanceInStart_SkipAppearanceCheck(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{}
 	cfg := &config.Config{SkipAppearanceCheck: true}
@@ -639,7 +650,6 @@ func TestCheckAllItemsAppearanceInStart_SkipAppearanceCheck(t *testing.T) {
 
 func TestCheckAllItemsAppearanceInStart_EmptyItems(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{}
 	ac := indexer.NewAppearanceChecker(mockClient, &config.Config{})
@@ -656,7 +666,6 @@ func TestCheckAllItemsAppearanceInStart_EmptyItems(t *testing.T) {
 
 func TestCheckAllItemsAppearanceInStart_NoPhysicalIndex(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{}
 	ac := indexer.NewAppearanceChecker(mockClient, &config.Config{})
@@ -679,9 +688,10 @@ func TestCheckAllItemsAppearanceInStart_NoPhysicalIndex(t *testing.T) {
 
 func TestCheckAllItemsAppearanceInStart_PhysicalIndexOutOfRange(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
-	mockClient := &MockLLMClient{}
+	mockClient := &MockLLMClient{
+		response: `{"start_begin": "yes"}`,
+	}
 	ac := indexer.NewAppearanceChecker(mockClient, &config.Config{})
 
 	items := []indexer.TOCItem{
@@ -701,7 +711,6 @@ func TestCheckAllItemsAppearanceInStart_PhysicalIndexOutOfRange(t *testing.T) {
 
 func TestCheckAllItemsAppearanceInStart_ConcurrentSafety(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"start_begin": "yes"}`,
@@ -710,7 +719,7 @@ func TestCheckAllItemsAppearanceInStart_ConcurrentSafety(t *testing.T) {
 
 	items := make([]indexer.TOCItem, 100)
 	pageTexts := make([]string, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		idx := i + 1
 		items[i] = indexer.TOCItem{
 			Title:         "Chapter",
@@ -731,7 +740,6 @@ func TestCheckAllItemsAppearanceInStart_ConcurrentSafety(t *testing.T) {
 
 func TestCheckAllItemsAppearanceInStart_LLMErrorHandling(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		err: assert.AnError,
@@ -757,10 +765,7 @@ func TestCheckAllItemsAppearanceInStart_LLMErrorHandling(t *testing.T) {
 
 func TestCheckAllItemsAppearanceInStart_MixedResults(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
-	callCount := 0
-	var mu sync.Mutex
 	mockClient := &MockLLMClient{
 		response: `{"start_begin": "yes"}`,
 	}
@@ -780,58 +785,45 @@ func TestCheckAllItemsAppearanceInStart_MixedResults(t *testing.T) {
 	is.Equal("yes", result[0].AppearStart)
 	is.Equal("no", result[1].AppearStart)
 	is.Equal("no", result[2].AppearStart)
-
-	mu.Lock()
-	actualCalls := mockClient.callCount
-	mu.Unlock()
-	is.Equal(1, actualCalls)
+	is.Equal(1, mockClient.GetCallCount())
 }
 
 func TestCheckAllItemsAppearanceInStart_ResponseVariations(t *testing.T) {
-	is := assert.New(t)
-	must := require.New(t)
-
-	responses := []string{
-		`{"start_begin": "yes"}`,
-		`{"start_begin": "no"}`,
-		`{"start_begin": "YES"}`,
-		`{"start_begin": "NO"}`,
+	tests := []struct {
+		name     string
+		response string
+		expected string
+	}{
+		{"yes lowercase", `{"start_begin": "yes"}`, "yes"},
+		{"no lowercase", `{"start_begin": "no"}`, "no"},
+		{"yes uppercase", `{"start_begin": "YES"}`, "yes"},
+		{"no uppercase", `{"start_begin": "NO"}`, "no"},
 	}
-	mockClient := &MockLLMClient{
-		response: responses[0],
-	}
-	ac := indexer.NewAppearanceChecker(mockClient, &config.Config{})
 
-	items := []indexer.TOCItem{
-		{Title: "Chapter 1", PhysicalIndex: intPtr(1)},
-		{Title: "Chapter 2", PhysicalIndex: intPtr(2)},
-		{Title: "Chapter 3", PhysicalIndex: intPtr(3)},
-		{Title: "Chapter 4", PhysicalIndex: intPtr(4)},
-	}
-	pageTexts := []string{"page 1", "page 2", "page 3", "page 4"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			is := assert.New(t)
 
-	ctx := context.Background()
+			mockClient := &MockLLMClient{
+				response: tt.response,
+			}
+			ac := indexer.NewAppearanceChecker(mockClient, &config.Config{})
 
-	for i, resp := range responses {
-		mockClient.Reset()
-		mockClient.response = resp
-		singleItem := []indexer.TOCItem{items[i]}
-		singlePage := []string{pageTexts[i]}
+			item := indexer.TOCItem{Title: "Chapter 1", PhysicalIndex: intPtr(1)}
+			pageTexts := []string{"page 1"}
 
-		result := ac.CheckAllItemsAppearanceInStart(ctx, singleItem, singlePage)
-		is.Len(result, 1)
+			ctx := context.Background()
+			result := ac.CheckAllItemsAppearanceInStart(ctx, []indexer.TOCItem{item}, pageTexts)
 
-		expected := "yes"
-		if resp == `{"start_begin": "no"}` || resp == `{"start_begin": "NO"}` {
-			expected = "no"
-		}
-		is.Equal(expected, result[0].AppearStart)
+			is.Len(result, 1)
+			is.Equal(tt.expected, result[0].AppearStart)
+			is.Equal(1, mockClient.GetCallCount())
+		})
 	}
 }
 
 func TestCheckAllItemsAppearanceInStart_ContextCancellation(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	mockClient := &MockLLMClient{
 		response: `{"start_begin": "yes"}`,
@@ -904,7 +896,6 @@ func TestCheckAllItemsAppearanceInStart_TableDriven(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := assert.New(t)
-			must := require.New(t)
 
 			mockClient := &MockLLMClient{
 				response: `{"start_begin": "yes"}`,
@@ -940,7 +931,6 @@ func intPtr(i int) *int {
 
 func TestParseLLMJSONResponse_ValidJSON(t *testing.T) {
 	is := assert.New(t)
-	must := require.New(t)
 
 	jsonStr := `{"answer": "yes"}`
 	var result struct {
@@ -949,7 +939,7 @@ func TestParseLLMJSONResponse_ValidJSON(t *testing.T) {
 
 	err := parseLLMJSONResponse(jsonStr, &result)
 
-	must.NoError(err)
+	assert.NoError(t, err)
 	is.Equal("yes", result.Answer)
 }
 
@@ -993,7 +983,7 @@ func TestParseLLMJSONResponse_WrongType(t *testing.T) {
 
 // parseLLMJSONResponse is a helper function from the indexer package.
 // We need to replicate it here for testing since it's not exported.
-func parseLLMJSONResponse(response string, result interface{}) error {
+func parseLLMJSONResponse(response string, result any) error {
 	cleaned := strings.TrimSpace(response)
 	if cleaned == "" {
 		return &json.UnmarshalTypeError{Value: "empty string", Type: nil, Offset: 0}
@@ -1003,6 +993,9 @@ func parseLLMJSONResponse(response string, result interface{}) error {
 
 // RateLimitError is a mock error type for testing rate limiting.
 // In the actual code, this would come from the llm package.
+
+// RateLimitError is a mock error type for testing rate limiting.
+
 type RateLimitError struct {
 	Message string
 }
