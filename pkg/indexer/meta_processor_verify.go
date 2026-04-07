@@ -37,10 +37,10 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 	}
 
 	if lastPhysicalIndex == 0 || lastPhysicalIndex < len(pageTexts)/2 {
-		// log.Debug().
-		// 	Int("lastPhysicalIndex", lastPhysicalIndex).
-		// 	Int("totalPages", len(pageTexts)).
-		// 	Msg("lastPhysicalIndex < totalPages/2, accepting TOC without verification")
+		log.Debug().
+			Int("lastPhysicalIndex", lastPhysicalIndex).
+			Int("totalPages", len(pageTexts)).
+			Msg("lastPhysicalIndex < totalPages/2, accepting TOC without verification")
 		return 1.0, items, nil
 	}
 
@@ -105,17 +105,17 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 
 	accuracy := float64(correctCount) / float64(checkedCount)
 
-	// log.Debug().
-	// 	Int("correctCount", correctCount).
-	// 	Int("checkedCount", checkedCount).
-	// 	Float64("accuracy", accuracy).
-	// 	Msg("TOC verification complete")
+	log.Debug().
+		Int("correctCount", correctCount).
+		Int("checkedCount", checkedCount).
+		Float64("accuracy", accuracy).
+		Msg("TOC verification complete")
 
 	switch {
 	case accuracy >= minTOCAccuracy:
-		// log.Debug().
-		// 	Int("incorrectCount", len(incorrectItems)).
-		// 	Msg("TOC accuracy >= threshold, returning all items for fixing")
+		log.Debug().
+			Int("incorrectCount", len(incorrectItems)).
+			Msg("TOC accuracy >= threshold, returning all items for fixing")
 		return accuracy, incorrectItems, nil
 
 	case accuracy >= lowAccuracyWarning:
