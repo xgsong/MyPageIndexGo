@@ -407,6 +407,55 @@ func TestParseLLMJSONResponse_ChinesePunctuation(t *testing.T) {
 	}
 }
 
+func TestParseLLMJSONResponse_JSONExtractionRegex(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectError bool
+		checkResult func(t *testing.T, result map[string]interface{})
+	}{
+		{
+			name:        "JSON object embedded in text",
+			input:       "Here is the result: {\"status\": \"success\"} end",
+			expectError: false,
+			checkResult: func(t *testing.T, result map[string]interface{}) {
+				assert.Equal(t, "success", result["status"])
+			},
+		},
+		{
+			name:        "JSON with leading and trailing garbage",
+			input:       "Some random text before {\"key\": \"value\"} and after",
+			expectError: false,
+			checkResult: func(t *testing.T, result map[string]interface{}) {
+				assert.Equal(t, "value", result["key"])
+			},
+		},
+		{
+			name:        "array regex fallback - successfully extracts object from array",
+			input:       "Result: [{\"found\": true}]",
+			expectError: false,
+			checkResult: func(t *testing.T, result map[string]interface{}) {
+				assert.Equal(t, true, result["found"])
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result map[string]interface{}
+			err := parseLLMJSONResponse(tt.input, &result)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				if tt.checkResult != nil {
+					tt.checkResult(t, result)
+				}
+			}
+		})
+	}
+}
+
 func TestDetectTOCPage_Success(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -976,6 +1025,25 @@ func TestAddPhysicalIndexToTOC_LLMError(t *testing.T) {
 	result, err := detector.addPhysicalIndexToTOC(ctx, tocItems, pages, 0)
 
 	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestAddPhysicalIndexToTOC_InvalidJSONResponse(t *testing.T) {
+	mockClient := &mockLLMClient{
+		generateResponse: "this is not valid json at all",
+	}
+	detector := NewTOCDetector(mockClient, &config.Config{})
+	ctx := context.Background()
+
+	tocItems := []TOCItem{
+		{Title: "Chapter 1", Structure: "chapter"},
+	}
+	pages := []string{"Page 1 content"}
+
+	result, err := detector.addPhysicalIndexToTOC(ctx, tocItems, pages, 0)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse physical index response")
 	assert.Nil(t, result)
 }
 
