@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	minTOCAccuracy     = 0.6 // Accept TOC if 60%+ items verified
+	minTOCAccuracy     = 0.5 // Accept TOC if 50%+ items verified
 	lowAccuracyWarning = 0.3 // Warn if accuracy below 30%
+	maxVerifyRetries   = 1   // Max retries for borderline accuracy
 )
 
 // verifyTOC verifies TOC accuracy using check_title_appearance approach.
@@ -26,7 +27,7 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 		return 0, nil, nil
 	}
 
-	// Early exit: if last physical_index < totalPages/2, return accuracy=0
+	// Early exit: if last physical_index < totalPages/2, return accuracy=1
 	// Python: page_index.py:910
 	lastPhysicalIndex := 0
 	for i := len(items) - 1; i >= 0; i-- {
@@ -44,72 +45,94 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 		return 1.0, items, nil
 	}
 
-	// Check all items concurrently using check_title_appearance
-	ac := NewAppearanceChecker(mp.llmClient, mp.cfg)
+	var (
+		accuracy        float64
+		incorrectItems  []TOCItem
+	)
 
-	type verifyResult struct {
-		itemIndex int
-		appears   bool
-		item      TOCItem
-	}
+	// Retry verification for borderline cases
+	for attempt := 0; attempt <= maxVerifyRetries; attempt++ {
+		// Check all items concurrently using check_title_appearance
+		ac := NewAppearanceChecker(mp.llmClient, mp.cfg)
 
-	results := make([]verifyResult, 0, len(items))
-	var mu sync.Mutex
-
-	// Use errgroup to limit concurrency and handle errors properly
-	// Limit to avoid overwhelming LLM with too many concurrent requests
-	eg, ctx := errgroup.WithContext(ctx)
-	verifyConcurrency := min(runtime.NumCPU()*2, 10)
-	eg.SetLimit(verifyConcurrency)
-
-	for i, item := range items {
-		if item.PhysicalIndex == nil {
-			continue
+		type verifyResult struct {
+			itemIndex int
+			appears   bool
+			item      TOCItem
 		}
 
-		i := i
-		item := item
-		eg.Go(func() error {
-			itemCopy := item
-			itemCopy.ListIndex = ptr(i)
-			appears, err := ac.CheckTitleAppearance(ctx, itemCopy, pageTexts, startIndex)
-			if err != nil {
-				return err
+		results := make([]verifyResult, 0, len(items))
+		var mu sync.Mutex
+
+		// Use errgroup to limit concurrency and handle errors properly
+		// Limit to avoid overwhelming LLM with too many concurrent requests
+		eg, ctx := errgroup.WithContext(ctx)
+		verifyConcurrency := min(runtime.NumCPU()*2, 10)
+		eg.SetLimit(verifyConcurrency)
+
+		for i, item := range items {
+			if item.PhysicalIndex == nil {
+				continue
 			}
 
-			mu.Lock()
-			results = append(results, verifyResult{itemIndex: i, appears: appears, item: itemCopy})
-			mu.Unlock()
-			return nil
-		})
-	}
+			i := i
+			item := item
+			eg.Go(func() error {
+				itemCopy := item
+				itemCopy.ListIndex = ptr(i)
+				appears, err := ac.CheckTitleAppearance(ctx, itemCopy, pageTexts, startIndex)
+				if err != nil {
+					return err
+				}
 
-	if err := eg.Wait(); err != nil {
-		log.Warn().Err(err).Msg("TOC verification encountered errors")
-	}
+				mu.Lock()
+				results = append(results, verifyResult{itemIndex: i, appears: appears, item: itemCopy})
+				mu.Unlock()
+				return nil
+			})
+		}
 
-	correctCount := 0
-	var incorrectItems []TOCItem
-	for _, r := range results {
-		if r.appears {
-			correctCount++
-		} else {
-			incorrectItems = append(incorrectItems, r.item)
+		if err := eg.Wait(); err != nil {
+			log.Warn().Err(err).Int("attempt", attempt+1).Msg("TOC verification encountered errors")
+		}
+
+		correctCount := 0
+		incorrectItems = nil
+		for _, r := range results {
+			if r.appears {
+				correctCount++
+			} else {
+				incorrectItems = append(incorrectItems, r.item)
+			}
+		}
+
+		checkedCount := correctCount + len(incorrectItems)
+		if checkedCount == 0 {
+			return 0, nil, nil
+		}
+
+		accuracy = float64(correctCount) / float64(checkedCount)
+
+		log.Debug().
+			Int("attempt", attempt+1).
+			Int("correctCount", correctCount).
+			Int("checkedCount", checkedCount).
+			Float64("accuracy", accuracy).
+			Msg("TOC verification complete")
+
+		// If accuracy meets threshold, no need to retry
+		if accuracy >= minTOCAccuracy {
+			break
+		}
+
+		// Only retry if we're in the borderline zone
+		if attempt < maxVerifyRetries && accuracy >= lowAccuracyWarning {
+			log.Info().
+				Float64("accuracy", accuracy).
+				Int("attempt", attempt+1).
+				Msg("TOC accuracy borderline, retrying verification")
 		}
 	}
-
-	checkedCount := correctCount + len(incorrectItems)
-	if checkedCount == 0 {
-		return 0, nil, nil
-	}
-
-	accuracy := float64(correctCount) / float64(checkedCount)
-
-	log.Debug().
-		Int("correctCount", correctCount).
-		Int("checkedCount", checkedCount).
-		Float64("accuracy", accuracy).
-		Msg("TOC verification complete")
 
 	switch {
 	case accuracy >= minTOCAccuracy:
@@ -121,9 +144,8 @@ func (mp *MetaProcessor) verifyTOC(ctx context.Context, pageTexts []string, item
 	case accuracy >= lowAccuracyWarning:
 		log.Warn().
 			Float64("accuracy", accuracy).
-			Int("correctCount", correctCount).
 			Int("incorrectCount", len(incorrectItems)).
-			Msg("TOC accuracy borderline, returning all items without fixing")
+			Msg("TOC accuracy borderline after retries, returning all items without fixing")
 		return accuracy, incorrectItems, nil
 
 	default:
