@@ -40,6 +40,11 @@ jobs:
     - name: Lint (golangci-lint)
       run: golangci-lint run --timeout=5m ./...
 
+    - name: Build binaries for E2E tests
+      run: |
+        go build -o pageindex ./cmd/pageindex
+        go build -o mcp-server ./cmd/mcp
+
     - name: Run tests with coverage
       run: go test ./... -race -coverprofile=coverage.out
 
