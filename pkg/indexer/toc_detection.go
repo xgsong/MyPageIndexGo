@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/xgsong/mypageindexgo/pkg/prompts"
 )
 
@@ -38,6 +40,8 @@ func transformDotsToColon(text string) string {
 func parseLLMJSONResponse(response string, target interface{}) error {
 	content := response
 	originalResponse := response
+
+	log.Debug().Str("response_length", strconv.Itoa(len(response))).Msg("parsing LLM JSON response")
 
 	// Remove all leading non-JSON characters (BOM, control characters, etc.)
 	content = strings.TrimFunc(content, func(r rune) bool {
@@ -190,6 +194,8 @@ func convertPhysicalIndexToInt(physicalIndex string) (int, error) {
 func (d *TOCDetector) detectTOCPage(ctx context.Context, content string) (bool, error) {
 	prompt := prompts.TOCDetectorPrompt(content)
 
+	log.Debug().Int("content_length", len(content)).Msg("detecting TOC page")
+
 	response, err := d.llmClient.GenerateSimple(ctx, prompt)
 	if err != nil {
 		return false, fmt.Errorf("failed to detect TOC: %w", err)
@@ -197,10 +203,13 @@ func (d *TOCDetector) detectTOCPage(ctx context.Context, content string) (bool, 
 
 	var result TOCPromptResult
 	if err := parseLLMJSONResponse(response, &result); err != nil {
+		log.Debug().Str("response", response).Msg("TOC detection JSON parse failed")
 		return false, nil
 	}
 
-	return strings.ToLower(result.TOCDetected) == "yes", nil
+	isTOC := strings.ToLower(result.TOCDetected) == "yes"
+	log.Debug().Bool("is_toc", isTOC).Msg("TOC detection result")
+	return isTOC, nil
 }
 
 // findTOCPages scans pages to find TOC pages starting from startPageIndex.
@@ -217,30 +226,38 @@ func (d *TOCDetector) findTOCPagesPerPage(ctx context.Context, pages []string, m
 	var tocPages []int
 	lastPageWasTOC := false
 
+	log.Debug().Int("total_pages", len(pages)).Int("start_index", startPageIndex).Int("max_pages", maxPages).Msg("starting TOC page detection")
+
 	for i := startPageIndex; i < len(pages); i++ {
 		select {
 		case <-ctx.Done():
+			log.Debug().Int("cancelled_at_page", i).Msg("TOC detection cancelled")
 			return tocPages, ctx.Err()
 		default:
 		}
 
 		if i >= maxPages && !lastPageWasTOC {
+			log.Debug().Int("stopped_at_page", i).Msg("TOC detection stopped")
 			break
 		}
 
 		isTOC, err := d.detectTOCPage(ctx, pages[i])
 		if err != nil {
+			log.Debug().Int("page", i).Err(err).Msg("TOC detection error")
 			continue
 		}
 
 		if isTOC {
 			tocPages = append(tocPages, i)
 			lastPageWasTOC = true
+			log.Debug().Int("page", i).Msg("found TOC page")
 		} else if lastPageWasTOC {
+			log.Debug().Int("page", i).Msg("TOC sequence ended")
 			break
 		}
 	}
 
+	log.Debug().Ints("toc_pages", tocPages).Msg("TOC detection complete")
 	return tocPages, nil
 }
 
