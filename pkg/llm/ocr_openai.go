@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/sashabaranov/go-openai"
+	"golang.org/x/sync/errgroup"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
 )
@@ -108,21 +110,60 @@ func (c *OpenAIOCRClient) Recognize(ctx context.Context, req *document.OCRReques
 }
 
 // RecognizeBatch performs OCR on multiple images in batch.
+// It uses concurrent processing with errgroup to parallelize OCR requests
+// while respecting context cancellation. This is more efficient than
+// sequential processing for multiple pages.
 func (c *OpenAIOCRClient) RecognizeBatch(ctx context.Context, reqs []*document.OCRRequest) ([]*document.OCRResponse, error) {
 	if len(reqs) == 0 {
 		return []*document.OCRResponse{}, nil
 	}
 
 	responses := make([]*document.OCRResponse, len(reqs))
+
+	// Use errgroup for concurrent processing with context support
+	g, ctx := errgroup.WithContext(ctx)
+
+	// Process each OCR request concurrently
 	for i, req := range reqs {
-		resp, err := c.Recognize(ctx, req)
-		if err != nil {
-			responses[i] = &document.OCRResponse{
-				Error: err.Error(),
+		// Capture loop variables
+		idx := i
+		r := req
+
+		g.Go(func() error {
+			// Check context cancellation before processing
+			select {
+			case <-ctx.Done():
+				responses[idx] = &document.OCRResponse{
+					PageNum: r.PageNum,
+					Error:   ctx.Err().Error(),
+				}
+				return ctx.Err()
+			default:
 			}
-		} else {
-			responses[i] = resp
-		}
+
+			resp, err := c.Recognize(ctx, r)
+			if err != nil {
+				log.Warn().
+					Err(err).
+					Int("page", r.PageNum).
+					Msg("OCR failed for page")
+				responses[idx] = &document.OCRResponse{
+					PageNum: r.PageNum,
+					Error:   err.Error(),
+				}
+			} else {
+				responses[idx] = resp
+				responses[idx].PageNum = r.PageNum
+			}
+			return nil
+		})
 	}
+
+	// Wait for all goroutines to complete
+	if err := g.Wait(); err != nil {
+		// Return partial results even if some failed or context was cancelled
+		log.Warn().Err(err).Msg("Batch OCR processing encountered errors")
+	}
+
 	return responses, nil
 }

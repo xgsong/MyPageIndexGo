@@ -11,11 +11,11 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/xgsong/mypageindexgo/pkg/config"
-	"github.com/xgsong/mypageindexgo/pkg/document"
 	"github.com/xgsong/mypageindexgo/pkg/indexer"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 	"github.com/xgsong/mypageindexgo/pkg/logging"
 	"github.com/xgsong/mypageindexgo/pkg/output"
+	"github.com/xgsong/mypageindexgo/pkg/workflow"
 )
 
 func main() {
@@ -160,53 +160,18 @@ func generateAction(c *cli.Context) error {
 		return fmt.Errorf("only one of --pdf or --md can be specified")
 	}
 
-	// Determine input file and parser
+	// Determine input file
 	var inputPath string
-	var parser document.DocumentParser
-
 	if pdfPath != "" {
 		inputPath = pdfPath
-		// Create OCR client if OCR is enabled
-		var ocrClient document.OCRClient
-		if cfg.OCREnabled {
-			ocrClient = llm.NewOpenAIOCRClient(cfg)
-		}
-		parser = document.NewPDFParserWithOCR(ocrClient)
-		log.Info().Str("file", inputPath).Msg("Parsing PDF document")
 	} else {
 		inputPath = mdPath
-		parser = document.NewMarkdownParser()
-		log.Info().Str("file", inputPath).Msg("Parsing Markdown document")
 	}
 
-	// Open and parse document
-	file, err := os.Open(inputPath)
+	// Create document service
+	svc, err := workflow.NewDocumentService(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close() // nolint:errcheck // File cleanup in CLI command
-
-	doc, err := parser.Parse(context.Background(), file)
-	if err != nil {
-		return fmt.Errorf("failed to parse document: %w", err)
-	}
-
-	log.Info().Int("pages", len(doc.Pages)).Msg("Document parsed successfully")
-
-	// Create LLM client
-	var llmClient llm.LLMClient = llm.NewOpenAIClient(cfg)
-
-	// Wrap with cache if enabled
-	if cfg.EnableLLMCache {
-		ttl := time.Duration(cfg.LLMCacheTTL) * time.Second
-		llmClient = llm.NewCachedLLMClient(llmClient, ttl, cfg.EnableSearchCache)
-		log.Info().Dur("ttl", ttl).Bool("search_cache", cfg.EnableSearchCache).Msg("LLM cache enabled")
-	}
-
-	// Create index generator
-	generator, err := indexer.NewIndexGenerator(cfg, llmClient)
-	if err != nil {
-		return fmt.Errorf("failed to create index generator: %w", err)
+		return fmt.Errorf("failed to create document service: %w", err)
 	}
 
 	// Generate index
@@ -228,10 +193,13 @@ func generateAction(c *cli.Context) error {
 	bar.Set(5)                   // nolint:errcheck // Progress bar error non-critical
 	bar.Describe("Initializing") // nolint:errcheck // Progress bar error non-critical
 
-	// Use GenerateWithTOC for better TOC-based indexing with deduplication
-	tree, err := generator.GenerateWithTOC(ctx, doc, progressCallback)
+	// Process document using the service
+	opts := workflow.DocumentServiceOptions{
+		ProgressCallback: progressCallback,
+	}
+	tree, err := svc.ProcessDocument(ctx, inputPath, opts)
 	if err != nil {
-		return fmt.Errorf("failed to generate index: %w", err)
+		return err
 	}
 
 	bar.Finish() // nolint:errcheck // Progress bar error non-critical
@@ -391,60 +359,38 @@ func updateAction(c *cli.Context) error {
 		Int("nodes", existingTree.CountAllNodes()).
 		Msg("Existing index loaded successfully")
 
-	// Determine input file and parser for the new document
+	// Determine input file for the new document
 	var inputPath string
-	var parser document.DocumentParser
-
 	if pdfPath != "" {
 		inputPath = pdfPath
-		// Create OCR client if OCR is enabled
-		var ocrClient document.OCRClient
-		if cfg.OCREnabled {
-			ocrClient = llm.NewOpenAIOCRClient(cfg)
-		}
-		parser = document.NewPDFParserWithOCR(ocrClient)
-		log.Info().Str("file", inputPath).Msg("Parsing new PDF document")
 	} else {
 		inputPath = mdPath
-		parser = document.NewMarkdownParser()
-		log.Info().Str("file", inputPath).Msg("Parsing new Markdown document")
 	}
 
-	// Open and parse new document
-	file, err := os.Open(inputPath)
+	// Create document service
+	svc, err := workflow.NewDocumentService(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to open new document: %w", err)
+		return fmt.Errorf("failed to create document service: %w", err)
 	}
-	defer file.Close() // nolint:errcheck // File cleanup in CLI command
 
-	newDoc, err := parser.Parse(context.Background(), file)
+	// Parse new document
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	newDoc, err := svc.ParseDocument(ctx, inputPath)
 	if err != nil {
-		return fmt.Errorf("failed to parse new document: %w", err)
-	}
-	log.Info().Int("pages", len(newDoc.Pages)).Msg("New document parsed successfully")
-
-	// Create LLM client
-	var llmClient llm.LLMClient = llm.NewOpenAIClient(cfg)
-
-	// Wrap with cache if enabled
-	if cfg.EnableLLMCache {
-		ttl := time.Duration(cfg.LLMCacheTTL) * time.Second
-		llmClient = llm.NewCachedLLMClient(llmClient, ttl, cfg.EnableSearchCache)
-		log.Info().Dur("ttl", ttl).Bool("search_cache", cfg.EnableSearchCache).Msg("LLM cache enabled")
-	}
-
-	// Create index generator
-	generator, err := indexer.NewIndexGenerator(cfg, llmClient)
-	if err != nil {
-		return fmt.Errorf("failed to create index generator: %w", err)
+		return err
 	}
 
 	// Generate merged index
 	log.Info().Msg("Generating merged index...")
 	startTime := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
+	// Create index generator using the service's LLM client
+	generator, err := indexer.NewIndexGenerator(cfg, svc.LLMClient())
+	if err != nil {
+		return fmt.Errorf("failed to create index generator: %w", err)
+	}
 
 	mergedTree, err := generator.Update(ctx, existingTree, newDoc)
 	if err != nil {

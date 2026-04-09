@@ -16,17 +16,33 @@ var pdfMagicNumber = []byte("%PDF-")
 
 const maxPDFFileSizeBytes = 50 * 1024 * 1024
 
+// DefaultPDFParserOptions returns default options for PDFParser.
+func DefaultPDFParserOptions() PDFParserOptions {
+	return PDFParserOptions{
+		OCRRenderDPI:   150,
+		OCRConcurrency: 5,
+	}
+}
+
+// PDFParserOptions holds configurable options for PDFParser.
+type PDFParserOptions struct {
+	OCRRenderDPI   int // DPI for rendering PDF pages to images (default: 150)
+	OCRConcurrency int // Maximum concurrent OCR requests (default: 5)
+}
+
 // PDFParser implements DocumentParser for PDF files.
 // Supports both text-based PDFs (text extraction) and scanned PDFs (OCR via LLM API).
 type PDFParser struct {
-	ocrClient OCRClient // Optional OCR client for scanned PDFs
-	enableOCR bool      // Whether to enable OCR fallback
+	ocrClient OCRClient        // Optional OCR client for scanned PDFs
+	enableOCR bool             // Whether to enable OCR fallback
+	options   PDFParserOptions // Parser configuration options
 }
 
 // NewPDFParser creates a new PDFParser with default settings (OCR disabled).
 func NewPDFParser() *PDFParser {
 	return &PDFParser{
 		enableOCR: false,
+		options:   DefaultPDFParserOptions(),
 	}
 }
 
@@ -35,6 +51,24 @@ func NewPDFParserWithOCR(ocrClient OCRClient) *PDFParser {
 	return &PDFParser{
 		ocrClient: ocrClient,
 		enableOCR: ocrClient != nil,
+		options:   DefaultPDFParserOptions(),
+	}
+}
+
+// NewPDFParserWithOptions creates a new PDFParser with OCR client and custom options.
+func NewPDFParserWithOptions(ocrClient OCRClient, options PDFParserOptions) *PDFParser {
+	// Apply defaults for zero values
+	if options.OCRRenderDPI <= 0 {
+		options.OCRRenderDPI = DefaultPDFParserOptions().OCRRenderDPI
+	}
+	if options.OCRConcurrency <= 0 {
+		options.OCRConcurrency = DefaultPDFParserOptions().OCRConcurrency
+	}
+
+	return &PDFParser{
+		ocrClient: ocrClient,
+		enableOCR: ocrClient != nil,
+		options:   options,
 	}
 }
 
@@ -198,13 +232,11 @@ func (p *PDFParser) extractWithOCR(ctx context.Context, buf []byte) ([]Page, err
 		return nil, fmt.Errorf("OCR client not configured")
 	}
 
-	// Create PDF renderer with default DPI 150
-	// TODO: Make DPI configurable via PDFParser options
-	renderer := NewPDFRenderer(150)
+	// Create PDF renderer with configured DPI
+	renderer := NewPDFRenderer(p.options.OCRRenderDPI)
 
-	// Render all pages to images
-	// TODO: Make concurrency configurable via PDFParser options
-	images, err := renderer.RenderAllPagesFromBytes(ctx, buf, 5)
+	// Render all pages to images with configured concurrency
+	images, err := renderer.RenderAllPagesFromBytes(ctx, buf, p.options.OCRConcurrency)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render PDF pages: %w", err)
 	}
@@ -234,8 +266,7 @@ func (p *PDFParser) extractWithOCR(ctx context.Context, buf []byte) ([]Page, err
 		pages[i] = Page{
 			Number: resp.PageNum,
 			Text:   resp.Text,
-			// TODO: Store structured OCR data in Page metadata when Page struct supports it
-		}
+			}
 	}
 
 	return pages, nil

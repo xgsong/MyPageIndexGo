@@ -35,6 +35,9 @@ type OCRClient interface {
 	Recognize(ctx context.Context, req *OCRRequest) (*OCRResponse, error)
 
 	// RecognizeBatch performs OCR on multiple images in batch.
-	// More efficient than calling Recognize multiple times.
+	// This method processes all images concurrently using goroutines,
+	// making it significantly more efficient than calling Recognize sequentially.
+	// The implementation respects context cancellation and returns partial
+	// results even if some individual OCR operations fail.
 	RecognizeBatch(ctx context.Context, reqs []*OCRRequest) ([]*OCRResponse, error)
 }

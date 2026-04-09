@@ -10,10 +10,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/xgsong/mypageindexgo/pkg/config"
-	"github.com/xgsong/mypageindexgo/pkg/document"
 	"github.com/xgsong/mypageindexgo/pkg/indexer"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 	"github.com/xgsong/mypageindexgo/pkg/output"
+	"github.com/xgsong/mypageindexgo/pkg/workflow"
 )
 
 func generateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -54,34 +54,13 @@ func generateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 		cfg.GenerateSummaries = *req.GenerateSummaries
 	}
 
-	file, err := os.Open(req.FilePath)
+	// Create document service for unified workflow
+	svc, err := workflow.NewDocumentService(cfg)
 	if err != nil {
-		return mcp.NewToolResultErrorf("文件打开失败：%v", err), nil
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	var parser document.DocumentParser
-	if ext == ".pdf" || ext == ".PDF" {
-		parser = document.NewPDFParser()
-	} else if ext == ".md" || ext == ".markdown" {
-		parser = document.NewMarkdownParser()
-	} else {
-		return mcp.NewToolResultErrorf("不支持的文件格式：%s", ext), nil
+		return mcp.NewToolResultErrorf("文档服务创建失败：%v", err), nil
 	}
 
-	doc, err := parser.Parse(ctx, file)
-	if err != nil {
-		return mcp.NewToolResultErrorf("文档解析失败：%v", err), nil
-	}
-
-	llmClient := llm.NewOpenAIClient(cfg)
-	generator, err := indexer.NewIndexGenerator(cfg, llmClient)
-	if err != nil {
-		return mcp.NewToolResultErrorf("索引生成器创建失败：%v", err), nil
-	}
-
+	// Progress callback for MCP notifications
 	progressCb := func(done, total int, desc string) {
 		srv := server.ServerFromContext(ctx)
 		if srv != nil {
@@ -94,7 +73,11 @@ func generateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 		}
 	}
 
-	tree, err := generator.GenerateWithTOC(ctx, doc, progressCb)
+	// Process document using unified workflow
+	opts := workflow.DocumentServiceOptions{
+		ProgressCallback: progressCb,
+	}
+	tree, err := svc.ProcessDocument(ctx, req.FilePath, opts)
 	if err != nil {
 		return mcp.NewToolResultErrorf("索引生成失败：%v", err), nil
 	}
@@ -247,40 +230,7 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		return mcp.NewToolResultErrorf("现有索引加载失败：%v", err), nil
 	}
 
-	if _, err := os.Stat(req.NewFilePath); err != nil {
-		return mcp.NewToolResultErrorf("新文档文件不存在：%s", req.NewFilePath), nil
-	}
-
-	ext := filepath.Ext(req.NewFilePath)
-	if ext != ".pdf" && ext != ".PDF" && ext != ".md" && ext != ".markdown" {
-		return mcp.NewToolResultErrorf("不支持的文件格式：%s", ext), nil
-	}
-
-	file, err := os.Open(req.NewFilePath)
-	if err != nil {
-		return mcp.NewToolResultErrorf("文件打开失败：%v", err), nil
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	sendProgress(2, 6, "Parsing new document")
-
-	var parser document.DocumentParser
-	if ext == ".pdf" || ext == ".PDF" {
-		parser = document.NewPDFParser()
-	} else if ext == ".md" || ext == ".markdown" {
-		parser = document.NewMarkdownParser()
-	} else {
-		return mcp.NewToolResultErrorf("不支持的文件格式：%s", ext), nil
-	}
-
-	newDoc, err := parser.Parse(ctx, file)
-	if err != nil {
-		return mcp.NewToolResultErrorf("文档解析失败：%v", err), nil
-	}
-
-	sendProgress(3, 6, "Loading configuration")
+	sendProgress(2, 6, "Loading configuration")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -295,15 +245,24 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		cfg.MaxConcurrency = *req.MaxConcurrency
 	}
 
-	var llmClient llm.LLMClient = llm.NewOpenAIClient(cfg)
-	if cfg.EnableLLMCache {
-		cacheTTL := time.Duration(cfg.LLMCacheTTL) * time.Second
-		llmClient = llm.NewCachedLLMClient(llmClient, cacheTTL, true)
+	// Create document service for unified workflow
+	svc, err := workflow.NewDocumentService(cfg)
+	if err != nil {
+		return mcp.NewToolResultErrorf("文档服务创建失败：%v", err), nil
+	}
+
+	sendProgress(3, 6, "Parsing new document")
+
+	// Parse new document using the service
+	newDoc, err := svc.ParseDocument(ctx, req.NewFilePath)
+	if err != nil {
+		return mcp.NewToolResultErrorf("文档解析失败：%v", err), nil
 	}
 
 	sendProgress(4, 6, "Generating index for new document")
 
-	generator, err := indexer.NewIndexGenerator(cfg, llmClient)
+	// Create index generator using the service's LLM client
+	generator, err := indexer.NewIndexGenerator(cfg, svc.LLMClient())
 	if err != nil {
 		return mcp.NewToolResultErrorf("索引生成器创建失败：%v", err), nil
 	}

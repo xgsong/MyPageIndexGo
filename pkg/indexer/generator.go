@@ -13,8 +13,6 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/tokenizer"
 )
 
-const maxNodeTextCacheEntries = 1000
-
 // nodeTextCacheEntry represents a cached entry for node text and token count
 type nodeTextCacheEntry struct {
 	text   string
@@ -30,10 +28,17 @@ type IndexGenerator struct {
 	rateLimiter   *DynamicRateLimiter // Dynamic rate limiter based on API feedback
 	nodeTextCache map[string]*nodeTextCacheEntry
 	cacheLock     sync.RWMutex
+	opts          GeneratorOptions
 }
 
 // NewIndexGenerator creates a new IndexGenerator.
 func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGenerator, error) {
+	return NewIndexGeneratorWithOptions(cfg, llmClient, DefaultGeneratorOptions())
+}
+
+// NewIndexGeneratorWithOptions creates a new IndexGenerator with custom options.
+// This allows for dependency injection and easier testing.
+func NewIndexGeneratorWithOptions(cfg *config.Config, llmClient llm.LLMClient, opts GeneratorOptions) (*IndexGenerator, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("nil config")
 	}
@@ -41,34 +46,23 @@ func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGener
 		return nil, fmt.Errorf("nil LLM client")
 	}
 
-	tok, err := tokenizer.NewTokenizer(cfg.OpenAIModel)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tokenizer: %w", err)
+	// Apply default options
+	if err := opts.ApplyDefaults(cfg, llmClient); err != nil {
+		return nil, fmt.Errorf("failed to apply generator options: %w", err)
 	}
 
 	// Get max tokens per group from config
 	maxTokens := min(max(1, cfg.MaxTokensPerNode), 24000)
-
-	pageGrouper := NewPageGrouper(tok, maxTokens)
-
-	initialConcurrency := max(1, cfg.MaxConcurrency)
-	minConcurrency := max(1, initialConcurrency/2)
-	maxConcurrency := max(initialConcurrency, initialConcurrency*4)
-	rateLimiter := NewDynamicRateLimiter(initialConcurrency, minConcurrency, maxConcurrency)
+	pageGrouper := NewPageGrouper(opts.Tokenizer, maxTokens)
 
 	gen := &IndexGenerator{
 		cfg:           cfg,
 		llmClient:     llmClient,
-		tokenizer:     tok,
+		tokenizer:     opts.Tokenizer,
 		pageGrouper:   pageGrouper,
-		rateLimiter:   rateLimiter,
+		rateLimiter:   opts.RateLimiter,
 		nodeTextCache: make(map[string]*nodeTextCacheEntry),
-	}
-
-	if openaiClient, ok := llmClient.(*llm.OpenAIClient); ok {
-		openaiClient.OnRateLimitInfo = func(info llm.RateLimitInfo) {
-			rateLimiter.AdjustRate(info.Remaining, info.Reset)
-		}
+		opts:          opts,
 	}
 
 	return gen, nil
@@ -92,16 +86,18 @@ func (g *IndexGenerator) getNodeTextAndTokens(node *document.Node, pageTextMap m
 	text := buildNodeText(node, pageTextMap)
 	tokens := g.tokenizer.Count(text)
 
-	// Store in cache
-	g.cacheLock.Lock()
-	// Limit cache size to prevent memory leak
-	if len(g.nodeTextCache) < maxNodeTextCacheEntries {
-		g.nodeTextCache[cacheKey] = &nodeTextCacheEntry{
-			text:   text,
-			tokens: tokens,
+	// Store in cache if enabled
+	if g.opts.EnableNodeTextCache {
+		g.cacheLock.Lock()
+		// Limit cache size to prevent memory leak
+		if len(g.nodeTextCache) < g.opts.MaxNodeTextCacheEntries {
+			g.nodeTextCache[cacheKey] = &nodeTextCacheEntry{
+				text:   text,
+				tokens: tokens,
+			}
 		}
+		g.cacheLock.Unlock()
 	}
-	g.cacheLock.Unlock()
 
 	return text, tokens
 }
