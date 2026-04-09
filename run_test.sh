@@ -1,0 +1,1 @@
+./pageindex generate --pdf ./test/fixtures/test.pdf --output index.json
