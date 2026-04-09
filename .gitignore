@@ -45,8 +45,8 @@ test-results/
 
 # Compiled binary (only at root level)
 /pageindex
+/pageindex-mcp
 *.exe
 
-nul
 test-scan.pdf
-pageindex-mcp
+

@@ -138,7 +138,10 @@ func (s *DocumentService) GenerateIndex(ctx context.Context, doc *document.Docum
 	}
 
 	// Generate index with progress callback
-	log.Info().Msg("Generating index...")
+	// Only log if no progress callback (CLI uses progress bar instead)
+	if opts.ProgressCallback == nil {
+		log.Info().Msg("Generating index...")
+	}
 	startTime := time.Now()
 
 	tree, err := generator.GenerateWithTOC(ctx, doc, opts.ProgressCallback)

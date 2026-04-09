@@ -174,14 +174,18 @@ func generateAction(c *cli.Context) error {
 		return fmt.Errorf("failed to create document service: %w", err)
 	}
 
-	// Generate index
-	log.Info().Msg("Generating index...")
 	startTime := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
 	defer cancel()
 
-	// Progress: 5 stages, each 20%
+	// Parse document first (no progress bar needed for parsing)
+	doc, err := svc.ParseDocument(ctx, inputPath)
+	if err != nil {
+		return err
+	}
+
+	// Create progress bar for index generation phase only
 	bar := progressbar.Default(100, "Generating index...")
 	progressCallback := func(done, total int, desc string) {
 		if total > 0 {
@@ -190,14 +194,12 @@ func generateAction(c *cli.Context) error {
 			bar.Describe(desc) // nolint:errcheck // Progress bar error non-critical
 		}
 	}
-	bar.Set(5)                   // nolint:errcheck // Progress bar error non-critical
-	bar.Describe("Initializing") // nolint:errcheck // Progress bar error non-critical
 
-	// Process document using the service
+	// Generate index
 	opts := workflow.DocumentServiceOptions{
 		ProgressCallback: progressCallback,
 	}
-	tree, err := svc.ProcessDocument(ctx, inputPath, opts)
+	tree, err := svc.GenerateIndex(ctx, doc, opts)
 	if err != nil {
 		return err
 	}
