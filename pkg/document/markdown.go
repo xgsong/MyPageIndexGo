@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -25,7 +26,7 @@ func NewMarkdownParser() *MarkdownParser {
 
 // Parse parses a Markdown document.
 // The entire Markdown document becomes a single page in the output.
-func (p *MarkdownParser) Parse(r io.Reader) (*Document, error) {
+func (p *MarkdownParser) Parse(ctx context.Context, r io.Reader) (*Document, error) {
 	content, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Markdown: %w", err)

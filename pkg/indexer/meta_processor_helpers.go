@@ -39,19 +39,27 @@ func (mp *MetaProcessor) validateAndTruncatePhysicalIndices(items []TOCItem, tot
 }
 
 func (mp *MetaProcessor) deepCopyTOCItems(items []TOCItem) []TOCItem {
-	copy := make([]TOCItem, len(items))
+	result := make([]TOCItem, len(items))
 	for i, item := range items {
-		copy[i] = item
+		result[i] = item
 		if item.Page != nil {
-			pageCopy := *item.Page
-			copy[i].Page = &pageCopy
+			val := *item.Page
+			result[i].Page = &val
 		}
 		if item.PhysicalIndex != nil {
-			idxCopy := *item.PhysicalIndex
-			copy[i].PhysicalIndex = &idxCopy
+			val := *item.PhysicalIndex
+			result[i].PhysicalIndex = &val
+		}
+		if item.ListIndex != nil {
+			val := *item.ListIndex
+			result[i].ListIndex = &val
+		}
+		if item.EndPage != nil {
+			val := *item.EndPage
+			result[i].EndPage = &val
 		}
 	}
-	return copy
+	return result
 }
 
 func (mp *MetaProcessor) samplePages(pageTexts []string, startIndex int, maxPages int) string {
@@ -241,11 +249,14 @@ func cleanTitleForOutput(title string) string {
 	return title
 }
 
-func levenshteinDistance(s1, s2 string, max int) int {
-	len1, len2 := len(s1), len(s2)
+func levenshteinDistance(s1, s2 string, maxDistance int) int {
+	// Convert to runes for correct Unicode (e.g., Chinese) character handling
+	r1 := []rune(s1)
+	r2 := []rune(s2)
+	len1, len2 := len(r1), len(r2)
 
-	if abs(len1-len2) > max {
-		return max + 1
+	if abs(len1-len2) > maxDistance {
+		return maxDistance + 1
 	}
 
 	if len1 == 0 {
@@ -256,7 +267,7 @@ func levenshteinDistance(s1, s2 string, max int) int {
 	}
 
 	if len1 > len2 {
-		s1, s2 = s2, s1
+		r1, r2 = r2, r1
 		len1, len2 = len2, len1
 	}
 
@@ -271,7 +282,7 @@ func levenshteinDistance(s1, s2 string, max int) int {
 
 		for i := 1; i <= len1; i++ {
 			substitutionCost := 0
-			if s1[i-1] != s2[j-1] {
+			if r1[i-1] != r2[j-1] {
 				substitutionCost = 1
 			}
 
@@ -287,19 +298,12 @@ func levenshteinDistance(s1, s2 string, max int) int {
 			diagonalUpLeft = current
 		}
 
-		if column[1] > max {
-			return max + 1
+		if column[1] > maxDistance {
+			return maxDistance + 1
 		}
 	}
 
 	return column[len1]
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func countDigitChanges(s1, s2 string) int {

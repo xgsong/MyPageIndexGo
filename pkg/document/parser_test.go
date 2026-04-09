@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -81,7 +82,7 @@ This is a test paragraph.
 Another paragraph here.
 `)
 
-	doc, err := parser.Parse(input)
+	doc, err := parser.Parse(context.Background(), input)
 	assert.NoError(t, err)
 	assert.NotNil(t, doc)
 	assert.Len(t, doc.Pages, 1)

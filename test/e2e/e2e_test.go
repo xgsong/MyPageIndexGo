@@ -59,7 +59,7 @@ func TestE2E_GenerateAndSearch(t *testing.T) {
 	parser, ok := reg.Get("md")
 	require.True(t, ok)
 
-	doc, err := parser.Parse(file)
+	doc, err := parser.Parse(context.Background(), file)
 	require.NoError(t, err)
 	assert.Equal(t, 1, doc.TotalPages())
 	assert.Contains(t, doc.Pages[0].Text, "Acme公司")
@@ -171,7 +171,7 @@ func TestE2E_GenerateAndSearch_PDF(t *testing.T) {
 	require.True(t, ok)
 
 	t.Log("Parsing PDF document... this may take a moment")
-	doc, err := parser.Parse(file)
+	doc, err := parser.Parse(context.Background(), file)
 	require.NoError(t, err)
 	assert.Greater(t, doc.TotalPages(), 0)
 	t.Logf("Parsed %d pages from PDF", doc.TotalPages())

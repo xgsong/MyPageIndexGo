@@ -47,7 +47,8 @@ func isValidPDF(buf []byte) bool {
 
 // Parse parses a PDF document and returns unified document.
 // First attempts to extract text layer, falls back to OCR if text is empty and OCR is enabled.
-func (p *PDFParser) Parse(r io.Reader) (*Document, error) {
+// Context is used for cancellation during OCR operations.
+func (p *PDFParser) Parse(ctx context.Context, r io.Reader) (*Document, error) {
 	buf, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read PDF: %w", err)
@@ -84,7 +85,7 @@ func (p *PDFParser) Parse(r io.Reader) (*Document, error) {
 			Int("empty_pages", emptyPageCount).
 			Bool("has_text", hasText).
 			Msg("Triggering OCR for mixed-content PDF")
-		pages, err = p.extractWithOCR(context.Background(), buf)
+		pages, err = p.extractWithOCR(ctx, buf)
 		if err != nil {
 			return nil, fmt.Errorf("OCR failed: %w", err)
 		}
@@ -183,8 +184,8 @@ func cleanExtractedText(text string) string {
 	result.Grow(len(text))
 
 	for _, r := range text {
-		// Keep printable characters, common whitespace, and Unicode letters
-		if unicode.IsPrint(r) || unicode.IsSpace(r) || unicode.IsLetter(r) {
+		// Keep printable characters and common whitespace
+		if unicode.IsPrint(r) || unicode.IsSpace(r) {
 			result.WriteRune(r)
 		}
 	}

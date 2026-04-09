@@ -3,6 +3,8 @@ package indexer
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
@@ -11,15 +13,23 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/tokenizer"
 )
 
+const maxNodeTextCacheEntries = 1000
+
+// nodeTextCacheEntry represents a cached entry for node text and token count
+type nodeTextCacheEntry struct {
+	text   string
+	tokens int
+}
+
 // IndexGenerator coordinates the full index generation process.
 type IndexGenerator struct {
-	cfg         *config.Config
-	llmClient   llm.LLMClient
-	tokenizer   *tokenizer.Tokenizer
-	pageGrouper *PageGrouper
-	doc         *document.Document  // Original document for summary generation
-	pageTextMap map[int]string      // Precomputed page number to text map for summary generation
-	rateLimiter *DynamicRateLimiter // Dynamic rate limiter based on API feedback
+	cfg           *config.Config
+	llmClient     llm.LLMClient
+	tokenizer     *tokenizer.Tokenizer
+	pageGrouper   *PageGrouper
+	rateLimiter   *DynamicRateLimiter // Dynamic rate limiter based on API feedback
+	nodeTextCache map[string]*nodeTextCacheEntry
+	cacheLock     sync.RWMutex
 }
 
 // NewIndexGenerator creates a new IndexGenerator.
@@ -47,11 +57,12 @@ func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGener
 	rateLimiter := NewDynamicRateLimiter(initialConcurrency, minConcurrency, maxConcurrency)
 
 	gen := &IndexGenerator{
-		cfg:         cfg,
-		llmClient:   llmClient,
-		tokenizer:   tok,
-		pageGrouper: pageGrouper,
-		rateLimiter: rateLimiter,
+		cfg:           cfg,
+		llmClient:     llmClient,
+		tokenizer:     tok,
+		pageGrouper:   pageGrouper,
+		rateLimiter:   rateLimiter,
+		nodeTextCache: make(map[string]*nodeTextCacheEntry),
 	}
 
 	if openaiClient, ok := llmClient.(*llm.OpenAIClient); ok {
@@ -61,6 +72,65 @@ func NewIndexGenerator(cfg *config.Config, llmClient llm.LLMClient) (*IndexGener
 	}
 
 	return gen, nil
+}
+
+// getNodeTextAndTokens returns the text content and token count for a node.
+// It uses instance-level caching to avoid repeated calculations for the same node.
+func (g *IndexGenerator) getNodeTextAndTokens(node *document.Node, pageTextMap map[int]string) (string, int) {
+	// Generate a cache key based on node properties
+	cacheKey := fmt.Sprintf("%s:%d:%d", node.ID, node.StartPage, node.EndPage)
+
+	// Check cache first
+	g.cacheLock.RLock()
+	if entry, ok := g.nodeTextCache[cacheKey]; ok {
+		g.cacheLock.RUnlock()
+		return entry.text, entry.tokens
+	}
+	g.cacheLock.RUnlock()
+
+	// Not in cache, calculate
+	text := buildNodeText(node, pageTextMap)
+	tokens := g.tokenizer.Count(text)
+
+	// Store in cache
+	g.cacheLock.Lock()
+	// Limit cache size to prevent memory leak
+	if len(g.nodeTextCache) < maxNodeTextCacheEntries {
+		g.nodeTextCache[cacheKey] = &nodeTextCacheEntry{
+			text:   text,
+			tokens: tokens,
+		}
+	}
+	g.cacheLock.Unlock()
+
+	return text, tokens
+}
+
+// buildNodeText builds the text content for a node by concatenating page texts.
+// It performs a single pass through the pages to both calculate size and build text.
+func buildNodeText(node *document.Node, pageTextMap map[int]string) string {
+	// Calculate total length for efficient allocation
+	totalLen := 0
+	for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
+		if text, ok := pageTextMap[pageNum]; ok {
+			totalLen += len(text) + 2 // +2 for "\n\n"
+		}
+	}
+
+	var builder strings.Builder
+	if totalLen > 0 {
+		builder.Grow(totalLen)
+	}
+
+	// Build the text
+	for pageNum := node.StartPage; pageNum <= node.EndPage; pageNum++ {
+		if text, ok := pageTextMap[pageNum]; ok {
+			builder.WriteString(text)
+			builder.WriteString("\n\n")
+		}
+	}
+
+	return builder.String()
 }
 
 func calculateOptimalBatchSize(nodeCount int, totalTokens int) (batchSize int, tokensPerBatch int) {
@@ -78,7 +148,7 @@ func calculateOptimalBatchSize(nodeCount int, totalTokens int) (batchSize int, t
 
 	batchSize = max(minBatchSize, min(nodeCount/targetBatches, maxBatchSize))
 
-	avgTokensPerNode := totalTokens / nodeCount
+	avgTokensPerNode := max(1, totalTokens/nodeCount)
 	calculatedTokens := avgTokensPerNode * batchSize
 	tokensPerBatch = max(minTokensPerBatch, min(calculatedTokens, maxTokensLimit))
 
@@ -87,9 +157,11 @@ func calculateOptimalBatchSize(nodeCount int, totalTokens int) (batchSize int, t
 
 // Generate generates a complete index tree from a parsed document.
 // It performs the full process: grouping → parallel structure generation → merging → (optional) summary generation.
+// NOTE: IndexGenerator is NOT safe for concurrent use. Each Generate/GenerateWithTOC call
+// should be on a dedicated instance or called sequentially.
 func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (*document.IndexTree, error) {
-	// Store reference to original document for summary generation
-	g.doc = doc
+	// Clear instance-level cache for each new document
+	g.nodeTextCache = make(map[string]*nodeTextCacheEntry)
 
 	// Detect document language from first page sample
 	if doc.Language.Code == "" {
@@ -98,10 +170,10 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 	}
 
 	// Precompute page text map for summary generation (1-based)
-	g.pageTextMap = make(map[int]string, len(doc.Pages))
+	pageTextMap := make(map[int]string, len(doc.Pages))
 	for i, p := range doc.Pages {
 		pageNum := i + 1 // Pages are 1-based
-		g.pageTextMap[pageNum] = p.Text
+		pageTextMap[pageNum] = p.Text
 	}
 
 	// Step 1: Group pages
@@ -115,7 +187,7 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 	}
 
 	// Step 2: Generate structure for each group in parallel
-	nodes, err := g.generateStructures(ctx, groups, nil)
+	nodes, err := g.generateStructures(ctx, groups, nil, doc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate structures: %w", err)
 	}
@@ -135,7 +207,7 @@ func (g *IndexGenerator) Generate(ctx context.Context, doc *document.Document) (
 
 	// Step 5: Generate summaries if enabled
 	if g.cfg.GenerateSummaries {
-		if err := g.generateAllSummaries(ctx, root, nil, 80, 100); err != nil {
+		if err := g.generateAllSummaries(ctx, root, nil, 80, 100, doc, pageTextMap); err != nil {
 			return nil, fmt.Errorf("failed to generate summaries: %w", err)
 		}
 	}

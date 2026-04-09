@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/sashabaranov/go-openai"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/xgsong/mypageindexgo/internal/utils"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/document"
@@ -71,38 +73,40 @@ func createLanguageSystemMessage(lang language.Language) string {
 	)
 }
 
+// prepareSystemMessage prepends the anti-thinking system message to the request messages.
+// This is done once before the retry loop to avoid duplication on retries.
+func prepareSystemMessage(req *openai.ChatCompletionRequest) {
+	systemContent := "IMPORTANT: Do NOT output any thinking/reasoning process, <think/> tags, or chain-of-thought content. Directly output only the final result in the required format. Any thought content must be completely excluded from your response."
+
+	if len(req.Messages) == 0 {
+		req.Messages = []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemContent,
+			},
+		}
+	} else if req.Messages[0].Role == openai.ChatMessageRoleSystem {
+		req.Messages[0].Content = systemContent + "\n" + req.Messages[0].Content
+	} else {
+		req.Messages = append([]openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemContent,
+			},
+		}, req.Messages...)
+	}
+
+	// Disable streaming to ensure we get complete response
+	req.Stream = false
+}
+
 // createChatCompletion sends a chat completion request with retry logic.
 func (c *OpenAIClient) createChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (string, error) {
+	// Prepare system message once BEFORE the retry loop to avoid duplication on retries.
+	prepareSystemMessage(&req)
+
 	var content string
 	err := utils.DoRetry(ctx, utils.DefaultRetryConfig(), func() error {
-		// Prepend system message to force disable thinking/reasoning output
-		// This works for all LLMs regardless of API parameter support
-		systemContent := "IMPORTANT: Do NOT output any thinking/reasoning process, <think> tags, or chain-of-thought content. Directly output only the final result in the required format. Any thought content must be completely excluded from your response."
-
-		if len(req.Messages) == 0 {
-			// No messages, add system message as first
-			req.Messages = []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: systemContent,
-				},
-			}
-		} else if req.Messages[0].Role == openai.ChatMessageRoleSystem {
-			// Already has a system message, merge our content into it
-			req.Messages[0].Content = systemContent + "\n" + req.Messages[0].Content
-		} else {
-			// No system message at beginning, prepend ours
-			req.Messages = append([]openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: systemContent,
-				},
-			}, req.Messages...)
-		}
-
-		// Disable streaming to ensure we get complete response
-		req.Stream = false
-
 		resp, err := c.client.CreateChatCompletion(ctx, req)
 		if err != nil {
 			// Check if this is an API error
@@ -386,33 +390,41 @@ func (c *OpenAIClient) GenerateBatchSummaries(ctx context.Context, requests []*B
 	return sortedResponses, nil
 }
 
+// fallbackToIndividualCalls falls back to generating summaries one by one when batch fails.
+// Uses errgroup to respect context cancellation and propagate errors.
 func (c *OpenAIClient) fallbackToIndividualCalls(ctx context.Context, requests []*BatchSummaryRequest, lang language.Language) []*BatchSummaryResponse {
 	responses := make([]*BatchSummaryResponse, len(requests))
 	var mu sync.Mutex
-	var wg sync.WaitGroup
+
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.SetLimit(5) // Limit concurrency for fallback calls
 
 	for i, req := range requests {
-		wg.Add(1)
-		go func(idx int, r *BatchSummaryRequest) {
-			defer wg.Done()
-
-			summary, err := c.GenerateSummary(ctx, r.NodeTitle, r.Text, lang)
+		i, req := i, req
+		eg.Go(func() error {
+			summary, err := c.GenerateSummary(ctx, req.NodeTitle, req.Text, lang)
 			resp := &BatchSummaryResponse{
-				NodeID: r.NodeID,
+				NodeID: req.NodeID,
 			}
 			if err != nil {
+				// Record the error but don't fail the entire fallback;
+				// other nodes can still get their summaries.
 				resp.Error = err.Error()
 			} else {
 				resp.Summary = summary
 			}
 
 			mu.Lock()
-			responses[idx] = resp
+			responses[i] = resp
 			mu.Unlock()
-		}(i, req)
+			return nil
+		})
 	}
 
-	wg.Wait()
+	// Wait for all goroutines; if context is cancelled, in-flight API calls
+	// will return early via ctx. Already-completed responses are preserved.
+	_ = eg.Wait()
+
 	return responses
 }
 

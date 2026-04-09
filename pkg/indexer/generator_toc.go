@@ -15,8 +15,8 @@ import (
 // Python equivalent: tree_parser in page_index.py:1029-1063
 func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Document, progressCb ProgressCallback) (*document.IndexTree, error) {
 
-	// Store reference to original document for summary generation
-	g.doc = doc
+	// Clear instance-level cache for each new document
+	g.nodeTextCache = make(map[string]*nodeTextCacheEntry)
 
 	// Detect document language from first page sample
 	if doc.Language.Code == "" {
@@ -34,10 +34,10 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	}
 
 	// Precompute page text map for summary generation (1-based)
-	g.pageTextMap = make(map[int]string, len(doc.Pages))
+	pageTextMap := make(map[int]string, len(doc.Pages))
 	for i, text := range pageTexts {
 		pageNum := i + 1 // Pages are 1-based
-		g.pageTextMap[pageNum] = text
+		pageTextMap[pageNum] = text
 	}
 
 	// Check if document has TOC (Stage 1)
@@ -105,12 +105,10 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 	items = ac.CheckAllItemsAppearanceInStart(ctx, items, pageTexts)
 
 	// Convert TOC items to tree structure using Python-equivalent logic
-	root := g.generateTreeFromTOC(items, pageTexts, len(doc.Pages))
+	root := g.generateTreeFromTOC(items, pageTexts, len(doc.Pages), pageTextMap)
 	if root == nil {
 		return nil, fmt.Errorf("failed to generate tree from TOC")
 	}
-
-
 
 	// Count total nodes
 	root.CountNodes()
@@ -121,7 +119,7 @@ func (g *IndexGenerator) GenerateWithTOC(ctx context.Context, doc *document.Docu
 
 	// Generate summaries if enabled (Stage 5)
 	if g.cfg.GenerateSummaries {
-		if err := g.generateAllSummaries(ctx, root, progressCb, 80, 100); err != nil {
+		if err := g.generateAllSummaries(ctx, root, progressCb, 80, 100, doc, pageTextMap); err != nil {
 			return nil, fmt.Errorf("failed to generate summaries: %w", err)
 		}
 	}
@@ -153,5 +151,3 @@ func addPrefaceIfNeeded(items []TOCItem) []TOCItem {
 
 	return items
 }
-
-

@@ -3,11 +3,11 @@ package indexer
 import (
 	"context"
 	"strings"
-	"sync"
 
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
 	"github.com/xgsong/mypageindexgo/pkg/prompts"
+	"golang.org/x/sync/errgroup"
 )
 
 // AppearanceChecker checks if TOC items appear at the start of their pages.
@@ -15,17 +15,23 @@ import (
 type AppearanceChecker struct {
 	llmClient           llm.LLMClient
 	skipAppearanceCheck bool
+	maxConcurrency      int
 }
 
 // NewAppearanceChecker creates a new AppearanceChecker.
 func NewAppearanceChecker(client llm.LLMClient, cfg *config.Config) *AppearanceChecker {
 	skipCheck := false
+	maxConcurrency := 5 // Default concurrency limit
 	if cfg != nil {
 		skipCheck = cfg.SkipAppearanceCheck
+		if cfg.MaxConcurrency > 0 {
+			maxConcurrency = cfg.MaxConcurrency
+		}
 	}
 	return &AppearanceChecker{
 		llmClient:           client,
 		skipAppearanceCheck: skipCheck,
+		maxConcurrency:      maxConcurrency,
 	}
 }
 
@@ -123,26 +129,22 @@ func (ac *AppearanceChecker) CheckAllItemsAppearanceInStart(ctx context.Context,
 		}
 	}
 
-	// Run concurrently
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+	// Run concurrently with bounded concurrency
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.SetLimit(ac.maxConcurrency)
 
 	for _, task := range tasks {
-		wg.Add(1)
-		go func(t checkTask) {
-			defer wg.Done()
-
-			result, err := ac.CheckTitleAppearanceInStart(ctx, t.title, t.text)
+		task := task
+		eg.Go(func() error {
+			result, err := ac.CheckTitleAppearanceInStart(ctx, task.title, task.text)
 			if err != nil {
 				result = "no"
 			}
-
-			mu.Lock()
-			items[t.index].AppearStart = result
-			mu.Unlock()
-		}(task)
+			items[task.index].AppearStart = result
+			return nil
+		})
 	}
 
-	wg.Wait()
+	_ = eg.Wait()
 	return items
 }

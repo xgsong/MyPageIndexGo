@@ -71,7 +71,7 @@ func generateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultErrorf("不支持的文件格式：%s", ext), nil
 	}
 
-	doc, err := parser.Parse(file)
+	doc, err := parser.Parse(ctx, file)
 	if err != nil {
 		return mcp.NewToolResultErrorf("文档解析失败：%v", err), nil
 	}
@@ -275,7 +275,7 @@ func updateIndexHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		return mcp.NewToolResultErrorf("不支持的文件格式：%s", ext), nil
 	}
 
-	newDoc, err := parser.Parse(file)
+	newDoc, err := parser.Parse(ctx, file)
 	if err != nil {
 		return mcp.NewToolResultErrorf("文档解析失败：%v", err), nil
 	}

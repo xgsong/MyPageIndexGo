@@ -141,6 +141,11 @@ func generateAction(c *cli.Context) error {
 		cfg.MaxConcurrency = c.Int("max-concurrency")
 	}
 
+	// Validate model after CLI flag overrides
+	if cfg.OpenAIModel == "" {
+		return fmt.Errorf("openai_model is required: set it in config.yaml or use --model flag")
+	}
+
 	// Reconfigure logging with actual level from config
 	setupLogging(cfg.LogLevel)
 
@@ -181,7 +186,7 @@ func generateAction(c *cli.Context) error {
 	}
 	defer file.Close() // nolint:errcheck // File cleanup in CLI command
 
-	doc, err := parser.Parse(file)
+	doc, err := parser.Parse(context.Background(), file)
 	if err != nil {
 		return fmt.Errorf("failed to parse document: %w", err)
 	}
@@ -355,6 +360,11 @@ func updateAction(c *cli.Context) error {
 		cfg.MaxConcurrency = c.Int("max-concurrency")
 	}
 
+	// Validate model after CLI flag overrides
+	if cfg.OpenAIModel == "" {
+		return fmt.Errorf("openai_model is required: set it in config.yaml or use --model flag")
+	}
+
 	// Reconfigure logging with actual level from config
 	setupLogging(cfg.LogLevel)
 
@@ -407,7 +417,7 @@ func updateAction(c *cli.Context) error {
 	}
 	defer file.Close() // nolint:errcheck // File cleanup in CLI command
 
-	newDoc, err := parser.Parse(file)
+	newDoc, err := parser.Parse(context.Background(), file)
 	if err != nil {
 		return fmt.Errorf("failed to parse new document: %w", err)
 	}

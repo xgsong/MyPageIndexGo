@@ -13,7 +13,7 @@ import (
 type ProgressCallback func(done, total int, desc string)
 
 // generateStructures generates the tree structure for each page group in parallel.
-func (g *IndexGenerator) generateStructures(ctx context.Context, groups []*PageGroup, progressCb ProgressCallback) ([]*document.Node, error) {
+func (g *IndexGenerator) generateStructures(ctx context.Context, groups []*PageGroup, progressCb ProgressCallback, doc *document.Document) ([]*document.Node, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.SetLimit(g.cfg.MaxConcurrency)
 
@@ -28,7 +28,7 @@ func (g *IndexGenerator) generateStructures(ctx context.Context, groups []*PageG
 				return fmt.Errorf("rate limiter wait failed: %w", err)
 			}
 
-			node, err := g.llmClient.GenerateStructure(ctx, group.Text, g.doc.Language)
+			node, err := g.llmClient.GenerateStructure(ctx, group.Text, doc.Language)
 			if err != nil {
 				return fmt.Errorf("group %d (%d-%d): failed to generate structure: %w", i+1, group.StartPage, group.EndPage, err)
 			}

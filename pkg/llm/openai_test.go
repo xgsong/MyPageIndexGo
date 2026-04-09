@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/xgsong/mypageindexgo/pkg/config"
@@ -156,7 +157,9 @@ func TestOpenAIClient_fallbackToIndividualCalls(t *testing.T) {
 	}
 
 	client := NewOpenAIClient(cfg)
-	ctx := context.Background()
+	// Use a short timeout context so the test doesn't hang on real API calls
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	lang := language.Language{Code: "en", Name: "English", Confidence: 0.9}
 
 	requests := []*BatchSummaryRequest{
@@ -170,6 +173,9 @@ func TestOpenAIClient_fallbackToIndividualCalls(t *testing.T) {
 	assert.Len(t, result, 2)
 	assert.Equal(t, "1", result[0].NodeID)
 	assert.Equal(t, "2", result[1].NodeID)
+	// Results should have errors since API calls will fail
+	assert.NotEmpty(t, result[0].Error)
+	assert.NotEmpty(t, result[1].Error)
 }
 
 func TestNewOpenAIOCRClient(t *testing.T) {

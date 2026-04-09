@@ -230,9 +230,12 @@ func TestCachedLLMClient_GenerateSimple_CacheHit(t *testing.T) {
 }
 
 func TestHashText(t *testing.T) {
-	result1 := hashText("prefix", "text")
-	result2 := hashText("prefix", "text")
-	result3 := hashText("prefix", "different")
+	mockClient := new(MockLLMClient)
+	cachedClient := NewCachedLLMClient(mockClient, 1*time.Hour, false).(*CachedLLMClient)
+
+	result1 := cachedClient.hashText("prefix", "text")
+	result2 := cachedClient.hashText("prefix", "text")
+	result3 := cachedClient.hashText("prefix", "different")
 
 	assert.Equal(t, result1, result2)
 	assert.NotEqual(t, result1, result3)

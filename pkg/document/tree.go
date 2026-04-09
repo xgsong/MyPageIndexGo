@@ -21,7 +21,7 @@ type Node struct {
 // NewNode creates a new Node with a generated UUID.
 func NewNode(title string, startPage, endPage int) *Node {
 	return &Node{
-		ID:        uuid.New().String()[:12],
+		ID:        uuid.New().String()[:16],
 		Title:     title,
 		StartPage: startPage,
 		EndPage:   endPage,

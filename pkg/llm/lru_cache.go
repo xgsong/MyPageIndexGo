@@ -36,24 +36,48 @@ func NewLRUCache(maxSize int, ttl time.Duration) *LRUCache {
 }
 
 func (c *LRUCache) Get(key string) (any, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	// Fast path: read-only check with RLock
+	c.mu.RLock()
 	entry, exists := c.entries[key]
 	if !exists {
+		c.mu.RUnlock()
 		return nil, false
 	}
 
+	// Check TTL while still holding RLock
 	if c.ttl > 0 && time.Since(entry.timestamp) > c.ttl {
-		c.removeEntry(entry)
+		c.mu.RUnlock()
+		// Upgrade to write lock to remove expired entry
+		c.mu.Lock()
+		// Re-check in case another goroutine already removed or updated it
+		if entry, exists = c.entries[key]; exists && c.ttl > 0 && time.Since(entry.timestamp) > c.ttl {
+			c.removeEntry(entry)
+		}
+		c.mu.Unlock()
 		return nil, false
 	}
 
-	if entry.element != nil {
-		c.lruList.MoveToFront(entry.element)
+	value := entry.value
+	needsMove := entry.element != nil
+	c.mu.RUnlock()
+
+	// Slow path: upgrade to write lock only if we need to move the entry
+	if needsMove {
+		c.mu.Lock()
+		// Re-check entry still exists (could have been evicted between RUnlock and Lock)
+		if entry, exists = c.entries[key]; exists {
+			// Re-check TTL under write lock
+			if c.ttl > 0 && time.Since(entry.timestamp) > c.ttl {
+				c.removeEntry(entry)
+				c.mu.Unlock()
+				return nil, false
+			}
+			c.lruList.MoveToFront(entry.element)
+		}
+		c.mu.Unlock()
 	}
 
-	return entry.value, true
+	return value, true
 }
 
 func (c *LRUCache) Set(key string, value any) {

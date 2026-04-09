@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"io"
 	"strings"
 
@@ -17,7 +18,8 @@ import (
 type DocumentParser interface {
 	// Parse reads from input and converts it to a unified Document structure.
 	// The output Document has pages ready for indexing.
-	Parse(r io.Reader) (*Document, error)
+	// Context is used for cancellation, especially during OCR operations.
+	Parse(ctx context.Context, r io.Reader) (*Document, error)
 	// SupportedExtensions returns the file extensions supported by this parser.
 	// Extensions should be lowercase without the leading dot.
 	SupportedExtensions() []string

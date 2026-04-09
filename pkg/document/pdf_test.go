@@ -50,7 +50,7 @@ func TestPDFParser_Parse_InvalidPDF(t *testing.T) {
 
 	// Test with non-PDF content
 	input := bytes.NewReader([]byte("This is not a PDF file"))
-	doc, err := parser.Parse(input)
+	doc, err := parser.Parse(context.Background(), input)
 	assert.Error(t, err)
 	assert.Nil(t, doc)
 	assert.Contains(t, err.Error(), "invalid PDF file")
@@ -61,7 +61,7 @@ func TestPDFParser_Parse_EmptyInput(t *testing.T) {
 
 	// Test with empty input
 	input := bytes.NewReader([]byte{})
-	doc, err := parser.Parse(input)
+	doc, err := parser.Parse(context.Background(), input)
 	assert.Error(t, err)
 	assert.Nil(t, doc)
 	assert.Contains(t, err.Error(), "invalid PDF file")
@@ -116,7 +116,7 @@ func TestPDFParser_Parse_ReadError(t *testing.T) {
 
 	// Create a reader that returns error
 	errReader := &errorReader{err: io.ErrUnexpectedEOF}
-	doc, err := parser.Parse(errReader)
+	doc, err := parser.Parse(context.Background(), errReader)
 	assert.Error(t, err)
 	assert.Nil(t, doc)
 	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)

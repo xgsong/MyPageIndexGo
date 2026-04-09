@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -20,7 +21,7 @@ func TestPDFParser_Integration(t *testing.T) {
 	}
 	defer file.Close() // nolint:errcheck // Test cleanup, ignore errors
 
-	doc, err := parser.Parse(file)
+	doc, err := parser.Parse(context.Background(), file)
 	require.NoError(t, err)
 	assert.NotNil(t, doc)
 	assert.Greater(t, len(doc.Pages), 0)
@@ -51,7 +52,7 @@ func TestPDFParser_InvalidFile(t *testing.T) {
 	require.NoError(t, err)
 	defer file.Close() // nolint:errcheck // Test cleanup, ignore errors
 
-	_, err = parser.Parse(file)
+	_, err = parser.Parse(context.Background(), file)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid PDF file")
 }
@@ -78,7 +79,7 @@ func TestPDFParser_FileTooLarge(t *testing.T) {
 	file, err := os.Open(tmpFile.Name())
 	require.NoError(t, err)
 
-	_, err = parser.Parse(file)
+	_, err = parser.Parse(context.Background(), file)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "file too large")
 
@@ -96,7 +97,7 @@ func TestMarkdownParser_Integration(t *testing.T) {
 	}
 	defer file.Close() // nolint:errcheck // Test cleanup, ignore errors
 
-	doc, err := parser.Parse(file)
+	doc, err := parser.Parse(context.Background(), file)
 	require.NoError(t, err)
 	assert.NotNil(t, doc)
 	assert.Equal(t, 1, len(doc.Pages))

@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ Some content here.
 More content.
 `
 	reader := strings.NewReader(content)
-	doc, err := parser.Parse(reader)
+	doc, err := parser.Parse(context.Background(), reader)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, doc)
@@ -43,7 +44,7 @@ func TestMarkdownParser_Parse_EmptyContent(t *testing.T) {
 	parser := NewMarkdownParser()
 
 	reader := strings.NewReader("")
-	doc, err := parser.Parse(reader)
+	doc, err := parser.Parse(context.Background(), reader)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, doc)
@@ -66,7 +67,7 @@ def hello():
 Paragraph after code.
 `
 	reader := strings.NewReader(content)
-	doc, err := parser.Parse(reader)
+	doc, err := parser.Parse(context.Background(), reader)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, doc)
@@ -98,7 +99,7 @@ func TestMarkdownParser_Parse_WithLists(t *testing.T) {
 - Item 3
 `
 	reader := strings.NewReader(content)
-	doc, err := parser.Parse(reader)
+	doc, err := parser.Parse(context.Background(), reader)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, doc)

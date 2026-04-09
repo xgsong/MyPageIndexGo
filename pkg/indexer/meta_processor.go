@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/rs/zerolog/log"
 	"github.com/xgsong/mypageindexgo/pkg/config"
 	"github.com/xgsong/mypageindexgo/pkg/language"
 	"github.com/xgsong/mypageindexgo/pkg/llm"
@@ -43,29 +44,17 @@ func NewMetaProcessor(client llm.LLMClient, cfg *config.Config, docLanguage lang
 // Process processes pages according to the specified mode
 // Python: meta_processor in page_index.py:959-997
 func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode ProcessingMode, tocContent string, tocPageList []int, startIndex int) ([]TOCItem, error) {
-	var result []TOCItem
-	var err error
-
-	switch mode {
-	case ModeTOCWithPageNumbers:
-		result, err = mp.processTOCWithPageNumbers(ctx, pageTexts, tocContent, tocPageList, startIndex)
-		if err != nil {
-			return mp.Process(ctx, pageTexts, ModeTOCNoPageNumbers, tocContent, tocPageList, startIndex)
-		}
-	case ModeTOCNoPageNumbers:
-		result, err = mp.processTOCNoPageNumbers(ctx, pageTexts, tocContent, startIndex)
-		if err != nil {
-			return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
-		}
-	case ModeNoTOC:
-		result, err = mp.processNoTOC(ctx, pageTexts, startIndex, tocPageList, false)
-		if err != nil {
-			return mp.generateSimpleFlatStructure(pageTexts, startIndex), nil
-		}
-	default:
-		return nil, fmt.Errorf("unknown processing mode: %s", mode)
+	// Define the fallback chain: each mode can fall back to the next on failure
+	// This replaces the recursive self-invocation with an explicit loop.
+	fallbackChain := map[ProcessingMode]ProcessingMode{
+		ModeTOCWithPageNumbers: ModeTOCNoPageNumbers,
+		ModeTOCNoPageNumbers:  ModeNoTOC,
 	}
 
+	currentMode := mode
+
+	// Phase 1: Try processing modes with fallback on error
+	result, err := mp.tryProcessWithFallback(ctx, pageTexts, currentMode, tocContent, tocPageList, startIndex, fallbackChain)
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +66,8 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 	result = mp.validateAndTruncatePhysicalIndices(result, len(pageTexts), startIndex)
 
 	// Verify TOC accuracy
-	accuracy, incorrectResults, err := mp.verifyTOC(ctx, pageTexts, result, startIndex)
-	if err != nil {
+	accuracy, incorrectResults, verifyErr := mp.verifyTOC(ctx, pageTexts, result, startIndex)
+	if verifyErr != nil {
 		return result, nil
 	}
 
@@ -87,35 +76,74 @@ func (mp *MetaProcessor) Process(ctx context.Context, pageTexts []string, mode P
 		return result, nil
 	}
 
-	// Check if accuracy is too low (< 0.3) - trigger fallback
+	// Check if accuracy is too low (< 0.3) - trigger fallback to next mode
 	if len(incorrectResults) == 0 && accuracy < 0.3 {
-		switch mode {
-		case ModeTOCWithPageNumbers:
-			return mp.Process(ctx, pageTexts, ModeTOCNoPageNumbers, tocContent, tocPageList, startIndex)
-		case ModeTOCNoPageNumbers:
-			return mp.Process(ctx, pageTexts, ModeNoTOC, "", []int{}, startIndex)
-		case ModeNoTOC:
-			return result, nil
+		if nextMode, ok := fallbackChain[currentMode]; ok {
+			log.Debug().
+				Str("from_mode", string(currentMode)).
+				Str("to_mode", string(nextMode)).
+				Float64("accuracy", accuracy).
+				Msg("Low TOC accuracy, falling back to next mode")
+			return mp.Process(ctx, pageTexts, nextMode, tocContent, tocPageList, startIndex)
 		}
+		return result, nil
 	}
 
 	// accuracy >= 0.6 - try to fix incorrect items
 	if accuracy >= minTOCAccuracy && len(incorrectResults) > 0 {
 		if !mp.cfg.SkipTOCFix {
-			fixedResult, _, err := mp.fixIncorrectTOCWithRetries(ctx, result, pageTexts, incorrectResults, startIndex, 3)
-			if err == nil {
+			fixedResult, _, fixErr := mp.fixIncorrectTOCWithRetries(ctx, result, pageTexts, incorrectResults, startIndex, 3)
+			if fixErr == nil {
 				return fixedResult, nil
 			}
 		}
 		return result, nil
 	}
 
-	// Borderline accuracy (0.3 <= accuracy < 0.6) with incorrect items - return results as-is
-	if len(incorrectResults) > 0 {
-		return result, nil
-	}
-
 	return result, nil
+}
+
+// tryProcessWithFallback attempts processing with the given mode and falls back
+// through the chain on error, using a non-recursive loop.
+func (mp *MetaProcessor) tryProcessWithFallback(ctx context.Context, pageTexts []string, initialMode ProcessingMode, tocContent string, tocPageList []int, startIndex int, fallbackChain map[ProcessingMode]ProcessingMode) ([]TOCItem, error) {
+	currentMode := initialMode
+	for {
+		result, err := mp.processMode(ctx, pageTexts, currentMode, tocContent, tocPageList, startIndex)
+		if err == nil {
+			return result, nil
+		}
+
+		nextMode, ok := fallbackChain[currentMode]
+		if !ok {
+			// No more fallbacks - generate flat structure as last resort
+			log.Debug().
+				Str("mode", string(currentMode)).
+				Err(err).
+				Msg("All processing modes failed, generating flat structure")
+			return mp.generateSimpleFlatStructure(pageTexts, startIndex), nil
+		}
+
+		log.Debug().
+			Str("from_mode", string(currentMode)).
+			Str("to_mode", string(nextMode)).
+			Err(err).
+			Msg("Processing mode failed, falling back")
+		currentMode = nextMode
+	}
+}
+
+// processMode executes the processing logic for a single mode.
+func (mp *MetaProcessor) processMode(ctx context.Context, pageTexts []string, mode ProcessingMode, tocContent string, tocPageList []int, startIndex int) ([]TOCItem, error) {
+	switch mode {
+	case ModeTOCWithPageNumbers:
+		return mp.processTOCWithPageNumbers(ctx, pageTexts, tocContent, tocPageList, startIndex)
+	case ModeTOCNoPageNumbers:
+		return mp.processTOCNoPageNumbers(ctx, pageTexts, tocContent, startIndex)
+	case ModeNoTOC:
+		return mp.processNoTOC(ctx, pageTexts, startIndex, tocPageList, false)
+	default:
+		return nil, fmt.Errorf("unknown processing mode: %s", mode)
+	}
 }
 
 // processTOCWithPageNumbers processes TOC with explicit page numbers

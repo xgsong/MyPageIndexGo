@@ -11,11 +11,15 @@ import (
 	"github.com/xgsong/mypageindexgo/pkg/language"
 )
 
+const maxHashCacheEntries = 1000
+
 type CachedLLMClient struct {
 	llmClient         LLMClient
 	cache             *LRUCache
 	ttl               time.Duration
 	enableSearchCache bool
+	hashCache         map[string]string
+	hashCacheLock     sync.RWMutex
 }
 
 func NewCachedLLMClient(client LLMClient, ttl time.Duration, enableSearchCache bool) LLMClient {
@@ -24,15 +28,11 @@ func NewCachedLLMClient(client LLMClient, ttl time.Duration, enableSearchCache b
 		cache:             NewLRUCache(DefaultMaxCacheEntries, ttl),
 		ttl:               ttl,
 		enableSearchCache: enableSearchCache,
+		hashCache:         make(map[string]string),
 	}
 }
 
-var (
-	hashCache     = make(map[string]string)
-	hashCacheLock sync.RWMutex
-)
-
-func hashText(prefix, text string) string {
+func (c *CachedLLMClient) hashText(prefix, text string) string {
 	// For short texts, compute directly
 	if len(text) < 1024 {
 		h := sha256.New()
@@ -40,33 +40,33 @@ func hashText(prefix, text string) string {
 		h.Write([]byte(text))
 		return hex.EncodeToString(h.Sum(nil))
 	}
-	
-	// For long texts, use cache
+
+	// For long texts, use instance-level cache
 	cacheKey := prefix + ":" + text
-	hashCacheLock.RLock()
-	if hash, ok := hashCache[cacheKey]; ok {
-		hashCacheLock.RUnlock()
+	c.hashCacheLock.RLock()
+	if hash, ok := c.hashCache[cacheKey]; ok {
+		c.hashCacheLock.RUnlock()
 		return hash
 	}
-	hashCacheLock.RUnlock()
-	
+	c.hashCacheLock.RUnlock()
+
 	h := sha256.New()
 	h.Write([]byte(prefix))
 	h.Write([]byte(text))
 	hash := hex.EncodeToString(h.Sum(nil))
-	
-	hashCacheLock.Lock()
+
+	c.hashCacheLock.Lock()
 	// Limit cache size to prevent memory leak
-	if len(hashCache) < 1000 {
-		hashCache[cacheKey] = hash
+	if len(c.hashCache) < maxHashCacheEntries {
+		c.hashCache[cacheKey] = hash
 	}
-	hashCacheLock.Unlock()
-	
+	c.hashCacheLock.Unlock()
+
 	return hash
 }
 
 func (c *CachedLLMClient) GenerateStructure(ctx context.Context, text string, lang language.Language) (*document.Node, error) {
-	key := hashText("GenerateStructure", text+lang.Code)
+	key := c.hashText("GenerateStructure", text+lang.Code)
 
 	if value, ok := c.cache.Get(key); ok {
 		return value.(*document.Node), nil
@@ -82,7 +82,7 @@ func (c *CachedLLMClient) GenerateStructure(ctx context.Context, text string, la
 }
 
 func (c *CachedLLMClient) GenerateSummary(ctx context.Context, nodeTitle string, text string, lang language.Language) (string, error) {
-	key := hashText("GenerateSummary", nodeTitle+"||"+text+"||"+lang.Code)
+	key := c.hashText("GenerateSummary", nodeTitle+"||"+text+"||"+lang.Code)
 
 	if value, ok := c.cache.Get(key); ok {
 		return value.(string), nil
@@ -102,7 +102,7 @@ func (c *CachedLLMClient) Search(ctx context.Context, query string, tree *docume
 		return c.llmClient.Search(ctx, query, tree)
 	}
 
-	key := hashText("Search", query+"||"+tree.Root.Title)
+	key := c.hashText("Search", query+"||"+tree.Root.Title)
 
 	if value, ok := c.cache.Get(key); ok {
 		return value.(*document.SearchResult), nil
@@ -124,20 +124,20 @@ func (c *CachedLLMClient) GenerateBatchSummaries(ctx context.Context, requests [
 		key string
 		idx int
 	}
-	
+
 	requestsWithKeys := make([]requestWithKey, len(requests))
 	for i, req := range requests {
 		requestsWithKeys[i] = requestWithKey{
 			req: req,
-			key: hashText("GenerateSummary", req.NodeTitle+"||"+req.Text+"||"+lang.Code),
+			key: c.hashText("GenerateSummary", req.NodeTitle+"||"+req.Text+"||"+lang.Code),
 			idx: i,
 		}
 	}
-	
+
 	// Separate cached and uncached requests
 	var cachedResponses []*BatchSummaryResponse
 	var uncachedRequests []requestWithKey
-	
+
 	for _, rwk := range requestsWithKeys {
 		if value, ok := c.cache.Get(rwk.key); ok {
 			cachedResponses = append(cachedResponses, &BatchSummaryResponse{
@@ -148,35 +148,38 @@ func (c *CachedLLMClient) GenerateBatchSummaries(ctx context.Context, requests [
 		}
 		uncachedRequests = append(uncachedRequests, rwk)
 	}
-	
+
 	if len(uncachedRequests) == 0 {
 		return cachedResponses, nil
 	}
-	
+
 	// Extract just the requests for the LLM call
 	llmRequests := make([]*BatchSummaryRequest, len(uncachedRequests))
 	for i, rwk := range uncachedRequests {
 		llmRequests[i] = rwk.req
 	}
-	
+
 	uncachedResponses, err := c.llmClient.GenerateBatchSummaries(ctx, llmRequests, lang)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Build final responses array
 	responses := make([]*BatchSummaryResponse, len(requests))
-	
-	// First, fill in cached responses
+
+	// Build index map for O(1) lookup
+	requestIDMap := make(map[string]int, len(requests))
+	for i, req := range requests {
+		requestIDMap[req.NodeID] = i
+	}
+
+	// Fill in cached responses using index map
 	for _, resp := range cachedResponses {
-		for i, req := range requests {
-			if req.NodeID == resp.NodeID {
-				responses[i] = resp
-				break
-			}
+		if idx, ok := requestIDMap[resp.NodeID]; ok {
+			responses[idx] = resp
 		}
 	}
-	
+
 	// Then, fill in uncached responses and update cache
 	for i, resp := range uncachedResponses {
 		rwk := uncachedRequests[i]
@@ -185,13 +188,13 @@ func (c *CachedLLMClient) GenerateBatchSummaries(ctx context.Context, requests [
 			c.cache.Set(rwk.key, resp.Summary)
 		}
 	}
-	
+
 	return responses, nil
 }
 
 // GenerateSimple generates a simple text response with caching
 func (c *CachedLLMClient) GenerateSimple(ctx context.Context, prompt string) (string, error) {
-	key := hashText("GenerateSimple", prompt)
+	key := c.hashText("GenerateSimple", prompt)
 
 	if value, ok := c.cache.Get(key); ok {
 		return value.(string), nil

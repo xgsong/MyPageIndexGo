@@ -12,17 +12,18 @@ import (
 )
 
 type Config struct {
-	Addr         string
-	Endpoint     string
-	BaseURL      string
-	AuthToken    string
-	APIKey       string
-	SessionTTL   time.Duration
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
-	EnableCORS   bool
-	EnableHealth bool
+	Addr          string
+	Endpoint      string
+	BaseURL       string
+	AuthToken     string
+	APIKey        string
+	SessionTTL    time.Duration
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+	IdleTimeout   time.Duration
+	EnableCORS    bool
+	CORSOrigins   []string // Allowed origins for CORS. Empty or ["*"] allows all.
+	EnableHealth  bool
 }
 
 func DefaultConfig() *Config {
@@ -74,7 +75,7 @@ func NewHTTPServer(mcpSrv *server.MCPServer, cfg *Config) *HTTPServer {
 
 	// Add CORS middleware if enabled
 	if cfg.EnableCORS {
-		handler = withCORS(handler)
+		handler = withCORS(cfg.CORSOrigins)(handler)
 	}
 
 	// Add health endpoint if enabled
@@ -197,18 +198,37 @@ func withAuthentication(cfg Config, next http.Handler) http.Handler {
 }
 
 // withCORS creates CORS middleware.
-func withCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, Mcp-Session-Id, Accept")
-		w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
+// When auth is enabled, browsers require a specific Origin instead of "*",
+// so CORSOrigins must be configured with the actual allowed origin(s).
+func withCORS(allowedOrigins []string) func(http.Handler) http.Handler {
+	// Normalize: treat empty as wildcard
+	wildcard := len(allowedOrigins) == 0 || (len(allowedOrigins) == 1 && allowedOrigins[0] == "*")
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if wildcard {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			} else if origin != "" {
+				for _, allowed := range allowedOrigins {
+					if origin == allowed {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+						w.Header().Set("Vary", "Origin")
+						break
+					}
+				}
+			}
 
-		next.ServeHTTP(w, r)
-	})
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, Mcp-Session-Id, Accept")
+			w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
+
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

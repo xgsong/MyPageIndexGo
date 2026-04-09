@@ -199,9 +199,8 @@ func validateConfig(cfg *Config) error {
 	if cfg.OpenAIBaseURL == "" {
 		return fmt.Errorf("openai_base_url is required in config.yaml")
 	}
-	if cfg.OpenAIModel == "" {
-		return fmt.Errorf("openai_model is required in config.yaml")
-	}
+	// OpenAIModel is validated after CLI flag overrides, not here,
+	// since the --model flag may provide the value when config.yaml does not.
 
 	// Validate required indexer fields
 	if cfg.MaxConcurrency <= 0 {
